@@ -1,21 +1,52 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Event } from '../../domain/entities/event.entity';
 import { EventRepository } from '../../domain/repositories/event.repository.interface';
+import { S3Service } from '../../infrastructure/storage/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
+import { CreateEventDto } from './dto/create-event.dto';
+import { UpdateEventDto } from './dto/update-event.dto';
+import { QueryEventsDto } from './dto/query-events.dto';
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+  destination?: string;
+  filename?: string;
+  path?: string;
+}
 
 @Injectable()
 export class EventsService {
   constructor(
     @Inject('EventRepository')
     private readonly eventRepository: EventRepository,
+    private readonly s3Service: S3Service,
   ) {}
 
-  async create(event: Omit<Event, 'id' | 'active' | 'createdAt' | 'updatedAt'>): Promise<Event> {
+  async create(createEventDto: CreateEventDto, imageFile?: MulterFile): Promise<Event> {
+    
+    const existingEvent = await this.eventRepository.findByName(createEventDto.name);
+    if (existingEvent) {
+      throw new ConflictException(`Event with name ${createEventDto.name} already exists`);
+    }
+
     const now = new Date().toISOString();
+    let imageUrl: string | undefined;
+
+    
+    if (imageFile) {
+      const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
+      imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
+    }
     
     const newEvent: Event = {
-      ...event,
+      ...createEventDto,
       id: uuidv4(),
+      imageUrl,
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -24,27 +55,55 @@ export class EventsService {
     return this.eventRepository.create(newEvent);
   }
 
-  async findAll(): Promise<Event[]> {
-    const events = await this.eventRepository.findAll();
-    return events.filter(event => event.active !== false);
+  async findAll(queryDto: QueryEventsDto): Promise<{ items: Event[]; total: number }> {
+    return this.eventRepository.findWithFilters({
+      name: queryDto.name,
+      startDate: queryDto.startDate,
+      endDate: queryDto.endDate,
+      active: queryDto.active,
+      page: queryDto.page || 1,
+      limit: queryDto.limit || 10,
+    });
   }
 
   async findById(id: string): Promise<Event> {
     const event = await this.eventRepository.findById(id);
-    if (!event || event.active === false) {
+    if (!event) {
       throw new NotFoundException(`Event with id ${id} not found`);
     }
     return event;
   }
 
-  async update(id: string, event: Partial<Event>): Promise<Event> {
-    const existingEvent = await this.eventRepository.findById(id);
-    if (!existingEvent || existingEvent.active === false) {
+  async update(id: string, updateEventDto: UpdateEventDto, userId: string, userRole: string, imageFile?: MulterFile): Promise<Event> {
+    const event = await this.eventRepository.findById(id);
+    if (!event) {
       throw new NotFoundException(`Event with id ${id} not found`);
     }
 
+
+    if (userRole !== 'admin' && event.organizerId !== userId) {
+      throw new BadRequestException('You do not have permission to update this event');
+    }
+
+    
+    if (updateEventDto.name && updateEventDto.name !== event.name) {
+      const existingEvent = await this.eventRepository.findByName(updateEventDto.name);
+      if (existingEvent && existingEvent.id !== id) {
+        throw new ConflictException(`Event with name ${updateEventDto.name} already exists`);
+      }
+    }
+
+    let imageUrl = event.imageUrl;
+
+    
+    if (imageFile) {
+      const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
+      imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
+    }
+
     const updatedEvent = {
-      ...event,
+      ...updateEventDto,
+      imageUrl,
       updatedAt: new Date().toISOString(),
     };
 
@@ -55,10 +114,15 @@ export class EventsService {
     return result;
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, userId: string, userRole: string): Promise<boolean> {
     const event = await this.eventRepository.findById(id);
     if (!event) {
       throw new NotFoundException(`Event with id ${id} not found`);
+    }
+
+    
+    if (userRole !== 'admin' && event.organizerId !== userId) {
+      throw new BadRequestException('You do not have permission to delete this event');
     }
 
     const deactivatedEvent = {
@@ -71,7 +135,6 @@ export class EventsService {
   }
 
   async findByDate(date: string): Promise<Event[]> {
-    const events = await this.eventRepository.findByDate(date);
-    return events.filter(event => event.active !== false);
+    return this.eventRepository.findByDate(date);
   }
 }
