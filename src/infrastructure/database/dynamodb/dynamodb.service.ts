@@ -34,7 +34,12 @@ export class DynamoDBService {
     return this.docClient.send(command);
   }
 
-  async scan(params: { TableName: string; FilterExpression?: string; ExpressionAttributeValues?: Record<string, any> }) {
+  async scan(params: { 
+    TableName: string; 
+    FilterExpression?: string; 
+    ExpressionAttributeValues?: Record<string, any>;
+    ExpressionAttributeNames?: Record<string, string>;
+  }) {
     const command = new ScanCommand(params);
     return this.docClient.send(command);
   }
