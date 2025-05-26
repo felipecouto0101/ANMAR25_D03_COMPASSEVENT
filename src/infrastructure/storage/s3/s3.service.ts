@@ -29,7 +29,12 @@ export class S3Service {
         sessionToken: this.configService.get('AWS_SESSION_TOKEN'),
       },
     });
-    this.bucketName = this.configService.get('AWS_S3_BUCKET_NAME') || 'compass-events';
+    
+    const bucketName = this.configService.get('AWS_S3_BUCKET_NAME');
+    if (!bucketName) {
+      throw new Error('AWS_S3_BUCKET_NAME environment variable is not defined');
+    }
+    this.bucketName = bucketName;
   }
 
   async uploadFile(file: MulterFile, key: string): Promise<string> {
