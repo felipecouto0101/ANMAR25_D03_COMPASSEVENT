@@ -15,6 +15,7 @@ import { createEventTable, createUserTable } from './dynamodb.utils';
           credentials: {
             accessKeyId: configService.get('AWS_ACCESS_KEY_ID') || 'dummy',
             secretAccessKey: configService.get('AWS_SECRET_ACCESS_KEY') || 'dummy',
+            sessionToken: configService.get('AWS_SESSION_TOKEN'),
           },
         });
       },
