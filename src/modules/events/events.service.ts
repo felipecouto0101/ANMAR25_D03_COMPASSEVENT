@@ -1,7 +1,9 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Event } from '../../domain/entities/event.entity';
 import { EventRepository } from '../../domain/repositories/event.repository.interface';
+import { UserRepository } from '../../domain/repositories/user.repository.interface';
 import { S3Service } from '../../infrastructure/storage/s3/s3.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -24,11 +26,13 @@ export class EventsService {
   constructor(
     @Inject('EventRepository')
     private readonly eventRepository: EventRepository,
+    @Inject('UserRepository')
+    private readonly userRepository: UserRepository,
     private readonly s3Service: S3Service,
+    private readonly mailService: MailService,
   ) {}
 
-  async create(createEventDto: CreateEventDto, imageFile?: MulterFile): Promise<Event> {
-    
+  async create(createEventDto: CreateEventDto, organizerId: string, imageFile?: MulterFile): Promise<Event> {
     const existingEvent = await this.eventRepository.findByName(createEventDto.name);
     if (existingEvent) {
       throw new ConflictException(`Event with name ${createEventDto.name} already exists`);
@@ -37,7 +41,6 @@ export class EventsService {
     const now = new Date().toISOString();
     let imageUrl: string | undefined;
 
-    
     if (imageFile) {
       const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
       imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
@@ -46,13 +49,34 @@ export class EventsService {
     const newEvent: Event = {
       ...createEventDto,
       id: uuidv4(),
+      organizerId,
       imageUrl,
       active: true,
       createdAt: now,
       updatedAt: now,
     };
 
-    return this.eventRepository.create(newEvent);
+    const createdEvent = await this.eventRepository.create(newEvent);
+    
+    const organizer = await this.userRepository.findById(organizerId);
+    if (organizer) {
+      await this.mailService.sendEventCreatedEmail(createdEvent, organizer);
+      
+      try {
+        const participants = await this.findParticipants();
+        if (participants.length > 0) {
+          await this.mailService.sendNewEventNotificationToParticipants(createdEvent, participants);
+        }
+      } catch (error) {
+        console.error('Failed to send notifications to participants:', error);
+      }
+    }
+
+    return createdEvent;
+  }
+
+  private async findParticipants() {
+    return [];
   }
 
   async findAll(queryDto: QueryEventsDto): Promise<{ items: Event[]; total: number }> {
@@ -80,12 +104,10 @@ export class EventsService {
       throw new NotFoundException(`Event with id ${id} not found`);
     }
 
-
     if (userRole !== 'admin' && event.organizerId !== userId) {
       throw new BadRequestException('You do not have permission to update this event');
     }
 
-    
     if (updateEventDto.name && updateEventDto.name !== event.name) {
       const existingEvent = await this.eventRepository.findByName(updateEventDto.name);
       if (existingEvent && existingEvent.id !== id) {
@@ -95,7 +117,6 @@ export class EventsService {
 
     let imageUrl = event.imageUrl;
 
-    
     if (imageFile) {
       const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
       imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
@@ -120,7 +141,6 @@ export class EventsService {
       throw new NotFoundException(`Event with id ${id} not found`);
     }
 
-    
     if (userRole !== 'admin' && event.organizerId !== userId) {
       throw new BadRequestException('You do not have permission to delete this event');
     }
@@ -131,6 +151,12 @@ export class EventsService {
     };
 
     await this.eventRepository.update(id, deactivatedEvent);
+    
+    const organizer = await this.userRepository.findById(event.organizerId);
+    if (organizer) {
+      await this.mailService.sendEventDeletedEmail(event, organizer);
+    }
+    
     return true;
   }
 
