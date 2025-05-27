@@ -9,12 +9,11 @@ import {
   Query, 
   UseInterceptors, 
   UploadedFile,
-  BadRequestException,
-  UseGuards,
   Request,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator
+  FileTypeValidator,
+  Inject
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -23,6 +22,8 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { QueryEventsDto } from './dto/query-events.dto';
 import { Event } from '../../domain/entities/event.entity';
+import { UserRepository } from '../../domain/repositories/user.repository.interface';
+import { ConfigService } from '@nestjs/config';
 
 interface MulterFile {
   fieldname: string;
@@ -39,7 +40,29 @@ interface MulterFile {
 @ApiTags('events')
 @Controller('events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  private adminId: string | null = null;
+
+  constructor(
+    private readonly eventsService: EventsService,
+    @Inject('UserRepository') private readonly userRepository: UserRepository,
+    private readonly configService: ConfigService
+  ) {
+    this.initAdminId();
+  }
+
+  private async initAdminId() {
+    try {
+      const adminEmail = this.configService.get<string>('DEFAULT_ADMIN_EMAIL');
+      if (adminEmail) {
+        const admin = await this.userRepository.findByEmail(adminEmail);
+        if (admin) {
+          this.adminId = admin.id;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize admin ID:', error);
+    }
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
@@ -48,6 +71,36 @@ export class EventsController {
   @ApiResponse({ status: 409, description: 'Event name already exists' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          example: 'Tech Conference 2025' 
+        },
+        description: { 
+          type: 'string', 
+          example: 'Annual technology conference with workshops and networking' 
+        },
+        date: { 
+          type: 'string', 
+          format: 'date-time', 
+          example: '2025-12-15T09:00:00.000Z' 
+        },
+        location: { 
+          type: 'string', 
+          example: 'Convention Center, New York' 
+        },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Event image file'
+        }
+      },
+      required: ['name', 'description', 'date', 'location', 'image']
+    }
+  })
   async create(
     @Body() createEventDto: CreateEventDto,
     @UploadedFile(
@@ -60,15 +113,7 @@ export class EventsController {
     ) imageFile: MulterFile,
     @Request() req: any
   ): Promise<Event> {
-
-    const userId = req.user?.id || 'mock-user-id';
-    const userRole = req.user?.role || 'admin';
-
-    
-    if (userRole !== 'admin' && userRole !== 'organizer') {
-      throw new BadRequestException('You do not have permission to create events');
-    }
-
+    const userId = req.user?.id || this.adminId;
     return this.eventsService.create(createEventDto, userId, imageFile);
   }
 
@@ -95,6 +140,35 @@ export class EventsController {
   @ApiResponse({ status: 409, description: 'Event name already exists' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          example: 'Tech Conference 2025' 
+        },
+        description: { 
+          type: 'string', 
+          example: 'Annual technology conference with workshops and networking' 
+        },
+        date: { 
+          type: 'string', 
+          format: 'date-time', 
+          example: '2025-12-15T09:00:00.000Z' 
+        },
+        location: { 
+          type: 'string', 
+          example: 'Convention Center, New York' 
+        },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Event image file (optional)'
+        }
+      }
+    }
+  })
   async update(
     @Param('id') id: string,
     @Body() updateEventDto: UpdateEventDto,
@@ -109,8 +183,7 @@ export class EventsController {
     ) imageFile: MulterFile,
     @Request() req: any
   ): Promise<Event> {
-    
-    const userId = req.user?.id || 'mock-user-id';
+    const userId = req.user?.id || this.adminId;
     const userRole = req.user?.role || 'admin';
 
     return this.eventsService.update(id, updateEventDto, userId, userRole, imageFile);
@@ -125,8 +198,7 @@ export class EventsController {
     @Param('id') id: string,
     @Request() req: any
   ): Promise<boolean> {
-    
-    const userId = req.user?.id || 'mock-user-id';
+    const userId = req.user?.id || this.adminId;
     const userRole = req.user?.role || 'admin';
 
     return this.eventsService.delete(id, userId, userRole);

@@ -6,10 +6,9 @@ import {
   Param, 
   Delete, 
   Query, 
-  Request,
-  ForbiddenException
+  Request
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { RegistrationsService } from './registrations.service';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { QueryRegistrationsDto } from './dto/query-registrations.dto';
@@ -26,17 +25,24 @@ export class RegistrationsController {
   @ApiResponse({ status: 400, description: 'Bad request - Event is inactive or in the past' })
   @ApiResponse({ status: 404, description: 'Event not found' })
   @ApiResponse({ status: 409, description: 'User is already registered for this event' })
+  @ApiBody({ 
+    type: CreateRegistrationDto,
+    description: 'Event registration data',
+    examples: {
+      validRegistration: {
+        summary: 'Valid Registration',
+        description: 'A valid event registration example',
+        value: {
+          eventId: '550e8400-e29b-41d4-a716-446655440000'
+        }
+      }
+    }
+  })
   async create(
     @Body() createRegistrationDto: CreateRegistrationDto,
     @Request() req: any
   ): Promise<RegistrationResponseDto> {
     const userId = req.user?.id || 'mock-user-id';
-    const userRole = req.user?.role || 'participant';
-
-    if (userRole !== 'participant' && userRole !== 'organizer') {
-      throw new ForbiddenException('Only participants and organizers can register for events');
-    }
-
     return this.registrationsService.create(userId, createRegistrationDto);
   }
 
