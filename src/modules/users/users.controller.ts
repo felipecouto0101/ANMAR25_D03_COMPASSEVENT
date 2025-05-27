@@ -62,6 +62,15 @@ export class UsersController {
     return this.usersService.create(createUserDto, profileImage);
   }
 
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify user email' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmail(@Query('token') token: string): Promise<{ success: boolean }> {
+    const result = await this.usersService.verifyEmail(token);
+    return { success: result };
+  }
+
   @Get()
   @ApiOperation({ summary: 'List all users with pagination and filters' })
   @ApiResponse({ status: 200, description: 'List of users returned successfully' })
@@ -70,7 +79,6 @@ export class UsersController {
     @Query() queryDto: QueryUsersDto,
     @Request() req: any
   ): Promise<{ items: UserResponseDto[]; total: number }> {
-    
     const userId = req.user?.id || 'mock-user-id';
     const userRole = req.user?.role || 'admin';
 
@@ -86,7 +94,6 @@ export class UsersController {
     @Param('id') id: string,
     @Request() req: any
   ): Promise<UserResponseDto> {
-    
     const userId = req.user?.id || 'mock-user-id';
     const userRole = req.user?.role || 'admin';
 
@@ -116,7 +123,6 @@ export class UsersController {
       }),
     ) profileImage?: MulterFile
   ): Promise<UserResponseDto> {
-    
     const userId = req.user?.id || 'mock-user-id';
     const userRole = req.user?.role || 'admin';
 
@@ -132,7 +138,6 @@ export class UsersController {
     @Param('id') id: string,
     @Request() req: any
   ): Promise<boolean> {
-    
     const userId = req.user?.id || 'mock-user-id';
     const userRole = req.user?.role || 'admin';
 
