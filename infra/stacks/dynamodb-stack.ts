@@ -32,6 +32,25 @@ export class DynamoDBStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    const registrationsTable = new dynamodb.Table(this, 'RegistrationsTable', {
+      tableName: 'Registrations',
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    registrationsTable.addGlobalSecondaryIndex({
+      indexName: 'UserIdIndex',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    registrationsTable.addGlobalSecondaryIndex({
+      indexName: 'EventIdIndex',
+      partitionKey: { name: 'eventId', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     new cdk.CfnOutput(this, 'EventsTableName', {
       value: eventsTable.tableName,
       description: 'The name of the events table',
@@ -40,6 +59,11 @@ export class DynamoDBStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'UsersTableName', {
       value: usersTable.tableName,
       description: 'The name of the users table',
+    });
+
+    new cdk.CfnOutput(this, 'RegistrationsTableName', {
+      value: registrationsTable.tableName,
+      description: 'The name of the registrations table',
     });
   }
 }
