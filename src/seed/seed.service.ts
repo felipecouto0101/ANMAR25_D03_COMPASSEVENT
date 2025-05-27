@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../modules/users/users.service';
+import { CreateUserDto } from '../modules/users/dto/create-user.dto';
 
 @Injectable()
 export class SeedService {
@@ -26,19 +27,24 @@ export class SeedService {
     }
 
     try {
-      const existingAdmin = await this.usersService.findByEmail(defaultAdminEmail);
       
-      if (existingAdmin) {
+      const users = await this.usersService.findAll(
+        { email: defaultAdminEmail, limit: 1, page: 1 },
+        'system',
+        'admin'
+      );
+      
+      if (users.items.length > 0) {
         this.logger.log(`Default admin user already exists: ${defaultAdminEmail}`);
         return;
       }
 
-      const defaultAdmin = {
+      const defaultAdmin: CreateUserDto = {
         name: defaultAdminName,
         email: defaultAdminEmail,
         password: defaultAdminPassword,
+        phone: '+1234567890', 
         role: 'admin',
-        active: true,
       };
 
       const createdAdmin = await this.usersService.create(defaultAdmin);
