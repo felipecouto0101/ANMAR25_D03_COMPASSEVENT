@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { Event } from '../../domain/entities/event.entity';
 import { EventRepository } from '../../domain/repositories/event.repository.interface';
 import { UserRepository } from '../../domain/repositories/user.repository.interface';
@@ -8,6 +8,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { QueryEventsDto } from './dto/query-events.dto';
+import { 
+  EntityNotFoundException, 
+  AuthorizationException, 
+  ConflictException,
+  ValidationException
+} from '../../domain/exceptions/domain.exceptions';
 
 interface MulterFile {
   fieldname: string;
@@ -32,19 +38,31 @@ export class EventsService {
     private readonly mailService: MailService,
   ) {}
 
-  async create(createEventDto: CreateEventDto, organizerId: string, imageFile?: MulterFile): Promise<Event> {
+  async create(createEventDto: CreateEventDto, organizerId: string, imageFile: MulterFile): Promise<Event> {
+    const user = await this.userRepository.findById(organizerId);
+    if (!user) {
+      throw new EntityNotFoundException('User', organizerId);
+    }
+
+    if (user.role !== 'admin' && user.role !== 'organizer') {
+      throw new AuthorizationException('Only administrators and organizers can create events');
+    }
+
     const existingEvent = await this.eventRepository.findByName(createEventDto.name);
     if (existingEvent) {
       throw new ConflictException(`Event with name ${createEventDto.name} already exists`);
     }
 
-    const now = new Date().toISOString();
-    let imageUrl: string | undefined;
-
-    if (imageFile) {
-      const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
-      imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
+    if (!imageFile) {
+      throw new ValidationException('Event image is required', {
+        image: 'An image file is required for event creation'
+      });
     }
+
+    const now = new Date().toISOString();
+    
+    const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
+    const imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
     
     const newEvent: Event = {
       ...createEventDto,
@@ -58,18 +76,15 @@ export class EventsService {
 
     const createdEvent = await this.eventRepository.create(newEvent);
     
-    const organizer = await this.userRepository.findById(organizerId);
-    if (organizer) {
-      await this.mailService.sendEventCreatedEmail(createdEvent, organizer);
+    await this.mailService.sendEventCreatedEmail(createdEvent, user);
       
-      try {
-        const participants = await this.findParticipants();
-        if (participants.length > 0) {
-          await this.mailService.sendNewEventNotificationToParticipants(createdEvent, participants);
-        }
-      } catch (error) {
-        console.error('Failed to send notifications to participants:', error);
+    try {
+      const participants = await this.findParticipants();
+      if (participants.length > 0) {
+        await this.mailService.sendNewEventNotificationToParticipants(createdEvent, participants);
       }
+    } catch (error) {
+      console.error('Failed to send notifications to participants:', error);
     }
 
     return createdEvent;
@@ -93,7 +108,7 @@ export class EventsService {
   async findById(id: string): Promise<Event> {
     const event = await this.eventRepository.findById(id);
     if (!event) {
-      throw new NotFoundException(`Event with id ${id} not found`);
+      throw new EntityNotFoundException('Event', id);
     }
     return event;
   }
@@ -101,11 +116,11 @@ export class EventsService {
   async update(id: string, updateEventDto: UpdateEventDto, userId: string, userRole: string, imageFile?: MulterFile): Promise<Event> {
     const event = await this.eventRepository.findById(id);
     if (!event) {
-      throw new NotFoundException(`Event with id ${id} not found`);
+      throw new EntityNotFoundException('Event', id);
     }
 
     if (userRole !== 'admin' && event.organizerId !== userId) {
-      throw new BadRequestException('You do not have permission to update this event');
+      throw new AuthorizationException('You do not have permission to update this event');
     }
 
     if (updateEventDto.name && updateEventDto.name !== event.name) {
@@ -130,7 +145,7 @@ export class EventsService {
 
     const result = await this.eventRepository.update(id, updatedEvent);
     if (!result) {
-      throw new NotFoundException(`Event with id ${id} not found`);
+      throw new EntityNotFoundException('Event', id);
     }
     return result;
   }
@@ -138,11 +153,11 @@ export class EventsService {
   async delete(id: string, userId: string, userRole: string): Promise<boolean> {
     const event = await this.eventRepository.findById(id);
     if (!event) {
-      throw new NotFoundException(`Event with id ${id} not found`);
+      throw new EntityNotFoundException('Event', id);
     }
 
     if (userRole !== 'admin' && event.organizerId !== userId) {
-      throw new BadRequestException('You do not have permission to delete this event');
+      throw new AuthorizationException('You do not have permission to delete this event');
     }
 
     const deactivatedEvent = {

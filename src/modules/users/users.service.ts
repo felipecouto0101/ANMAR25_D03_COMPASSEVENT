@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { User } from '../../domain/entities/user.entity';
 import { UserRepository } from '../../domain/repositories/user.repository.interface';
 import { S3Service } from '../../infrastructure/storage/s3/s3.service';
@@ -9,6 +9,12 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { 
+  EntityNotFoundException, 
+  ValidationException, 
+  AuthorizationException, 
+  ConflictException 
+} from '../../domain/exceptions/domain.exceptions';
 
 interface MulterFile {
   fieldname: string;
@@ -68,20 +74,20 @@ export class UsersService {
   async verifyEmail(token: string): Promise<boolean> {
     const decoded = this.mailService.verifyEmailToken(token);
     if (!decoded) {
-      throw new BadRequestException('Invalid or expired verification token');
+      throw new ValidationException('Invalid or expired verification token');
     }
 
     const user = await this.userRepository.findById(decoded.userId);
     if (!user) {
-      throw new NotFoundException(`User not found`);
+      throw new EntityNotFoundException('User', decoded.userId);
     }
 
     if (user.email !== decoded.email) {
-      throw new BadRequestException('Token does not match user email');
+      throw new ValidationException('Token does not match user email');
     }
 
     if (user.emailVerified) {
-      return true; 
+      return true;
     }
 
     const updatedUser = {
@@ -95,7 +101,7 @@ export class UsersService {
 
   async findAll(queryDto: QueryUsersDto, userId: string, userRole: string): Promise<{ items: UserResponseDto[]; total: number }> {
     if (userRole !== 'admin') {
-      throw new ForbiddenException('Only administrators can list users');
+      throw new AuthorizationException('Only administrators can list users');
     }
 
     const result = await this.userRepository.findWithFilters({
@@ -115,12 +121,12 @@ export class UsersService {
 
   async findById(id: string, requestUserId: string, userRole: string): Promise<UserResponseDto> {
     if (userRole !== 'admin' && id !== requestUserId) {
-      throw new ForbiddenException('You do not have permission to view this user');
+      throw new AuthorizationException('You do not have permission to view this user');
     }
 
     const user = await this.userRepository.findById(id);
     if (!user || !user.active) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new EntityNotFoundException('User', id);
     }
 
     return new UserResponseDto(user);
@@ -128,12 +134,12 @@ export class UsersService {
 
   async update(id: string, updateUserDto: UpdateUserDto, requestUserId: string, userRole: string, profileImage?: MulterFile): Promise<UserResponseDto> {
     if (id !== requestUserId && userRole !== 'admin') {
-      throw new ForbiddenException('You do not have permission to update this user');
+      throw new AuthorizationException('You do not have permission to update this user');
     }
 
     const user = await this.userRepository.findById(id);
     if (!user || !user.active) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new EntityNotFoundException('User', id);
     }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
@@ -166,7 +172,7 @@ export class UsersService {
 
     const result = await this.userRepository.update(id, updatedUser);
     if (!result) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new EntityNotFoundException('User', id);
     }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
@@ -178,12 +184,12 @@ export class UsersService {
 
   async delete(id: string, requestUserId: string, userRole: string): Promise<boolean> {
     if (userRole !== 'admin' && id !== requestUserId) {
-      throw new ForbiddenException('You do not have permission to delete this user');
+      throw new AuthorizationException('You do not have permission to delete this user');
     }
 
     const user = await this.userRepository.findById(id);
     if (!user) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new EntityNotFoundException('User', id);
     }
 
     const deactivatedUser = {

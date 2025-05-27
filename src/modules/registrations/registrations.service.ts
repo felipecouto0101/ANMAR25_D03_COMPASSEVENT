@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { Registration } from '../../domain/entities/registration.entity';
 import { RegistrationRepository } from '../../domain/repositories/registration.repository.interface';
 import { EventRepository } from '../../domain/repositories/event.repository.interface';
@@ -8,6 +8,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { QueryRegistrationsDto } from './dto/query-registrations.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
+import { 
+  EntityNotFoundException, 
+  ValidationException, 
+  AuthorizationException, 
+  ConflictException 
+} from '../../domain/exceptions/domain.exceptions';
 
 @Injectable()
 export class RegistrationsService {
@@ -22,19 +28,32 @@ export class RegistrationsService {
   ) {}
 
   async create(userId: string, createRegistrationDto: CreateRegistrationDto): Promise<RegistrationResponseDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new EntityNotFoundException('User', userId);
+    }
+    
+    if (user.role !== 'participant' && user.role !== 'organizer') {
+      throw new AuthorizationException('Only participants and organizers can register for events');
+    }
+    
     const event = await this.eventRepository.findById(createRegistrationDto.eventId);
     if (!event) {
-      throw new NotFoundException(`Event with id ${createRegistrationDto.eventId} not found`);
+      throw new EntityNotFoundException('Event', createRegistrationDto.eventId);
     }
 
     if (!event.active) {
-      throw new BadRequestException(`Event with id ${createRegistrationDto.eventId} is inactive`);
+      throw new ValidationException(`Event with id ${createRegistrationDto.eventId} is inactive`, {
+        eventId: "Must be an active event ID"
+      });
     }
 
     const eventDate = new Date(event.date);
     const now = new Date();
     if (eventDate < now) {
-      throw new BadRequestException(`Cannot register for past events`);
+      throw new ValidationException('Cannot register for past events', {
+        eventId: "Must be a future event ID"
+      });
     }
 
     const existingRegistration = await this.registrationRepository.findByUserAndEvent(userId, createRegistrationDto.eventId);
@@ -54,18 +73,14 @@ export class RegistrationsService {
     };
 
     const createdRegistration = await this.registrationRepository.create(newRegistration);
-    
-    const user = await this.userRepository.findById(userId);
-    if (user) {
-      await this.mailService.sendRegistrationConfirmationEmail(event, user);
-    }
+    await this.mailService.sendRegistrationConfirmationEmail(event, user);
     
     return new RegistrationResponseDto(createdRegistration, event);
   }
 
   async findAll(userId: string, queryDto: QueryRegistrationsDto, requestUserId: string): Promise<{ items: RegistrationResponseDto[]; total: number }> {
     if (userId !== requestUserId) {
-      throw new ForbiddenException('You can only view your own registrations');
+      throw new AuthorizationException('You can only view your own registrations');
     }
 
     const result = await this.registrationRepository.findByUser(
@@ -78,7 +93,7 @@ export class RegistrationsService {
       result.items.map(async (registration) => {
         const event = await this.eventRepository.findById(registration.eventId);
         if (!event) {
-          throw new NotFoundException(`Event with id ${registration.eventId} not found`);
+          throw new EntityNotFoundException('Event', registration.eventId);
         }
         return new RegistrationResponseDto(registration, event);
       })
@@ -93,11 +108,11 @@ export class RegistrationsService {
   async delete(id: string, userId: string): Promise<boolean> {
     const registration = await this.registrationRepository.findById(id);
     if (!registration) {
-      throw new NotFoundException(`Registration with id ${id} not found`);
+      throw new EntityNotFoundException('Registration', id);
     }
 
     if (registration.userId !== userId) {
-      throw new ForbiddenException('You can only cancel your own registrations');
+      throw new AuthorizationException('You can only cancel your own registrations');
     }
 
     const deactivatedRegistration = {
