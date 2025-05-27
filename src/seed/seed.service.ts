@@ -27,7 +27,6 @@ export class SeedService {
     }
 
     try {
-      
       const users = await this.usersService.findAll(
         { email: defaultAdminEmail, limit: 1, page: 1 },
         'system',
