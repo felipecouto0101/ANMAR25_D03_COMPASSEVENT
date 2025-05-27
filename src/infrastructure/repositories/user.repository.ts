@@ -16,12 +16,14 @@ export class UserDynamoDBRepository extends BaseDynamoDBRepository<User> impleme
   async findByEmail(email: string): Promise<User | null> {
     const result = await this.dynamoDBService.scan({
       TableName: this.tableName,
-      FilterExpression: '#email = :email',
+      FilterExpression: '#email = :email AND #active = :active',
       ExpressionAttributeNames: {
         '#email': 'email',
+        '#active': 'active',
       },
       ExpressionAttributeValues: {
         ':email': email,
+        ':active': true,
       },
     });
 
@@ -79,7 +81,6 @@ export class UserDynamoDBRepository extends BaseDynamoDBRepository<User> impleme
     const items = result.Items as User[];
     const total = items.length;
 
-    
     const startIndex = (filters.page - 1) * filters.limit;
     const paginatedItems = items.slice(startIndex, startIndex + filters.limit);
 
