@@ -69,7 +69,7 @@ export class EventsController {
       throw new BadRequestException('You do not have permission to create events');
     }
 
-    return this.eventsService.create(createEventDto, imageFile);
+    return this.eventsService.create(createEventDto, userId, imageFile);
   }
 
   @Get()
