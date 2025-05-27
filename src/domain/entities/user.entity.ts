@@ -6,6 +6,7 @@ export class User {
   phone: string;
   role: 'admin' | 'organizer' | 'participant';
   profileImageUrl?: string;
+  emailVerified: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;
