@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { SESClient, SendEmailCommand, ListVerifiedEmailAddressesCommand } from '@aws-sdk/client-ses';
 import * as ical from 'ical-generator';
 import * as jwt from 'jsonwebtoken';
 import { User } from '../../domain/entities/user.entity';
@@ -15,35 +15,67 @@ export class MailService {
   private readonly frontendUrl: string | undefined;
   private readonly verificationSecret: string | undefined;
   private readonly verificationExpiry: string | undefined;
+  private verifiedEmails: Set<string> = new Set();
 
   constructor(private readonly configService: ConfigService) {
-    const sesAccessKeyId = this.configService.get<string>('AWS_SES_ACCESS_KEY_ID');
-    const sesSecretAccessKey = this.configService.get<string>('AWS_SES_SECRET_ACCESS_KEY');
-    const sesRegion = this.configService.get<string>('AWS_SES_REGION');
+    const region = this.configService.get<string>('AWS_REGION');
+    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const sessionToken = this.configService.get<string>('AWS_SESSION_TOKEN');
     
     this.fromEmail = this.configService.get<string>('EMAIL_FROM');
     this.frontendUrl = this.configService.get<string>('FRONTEND_URL');
     this.verificationSecret = this.configService.get<string>('EMAIL_VERIFICATION_SECRET');
     this.verificationExpiry = this.configService.get<string>('EMAIL_VERIFICATION_EXPIRY');
 
-    if (sesAccessKeyId && sesSecretAccessKey && sesRegion && this.fromEmail) {
+    if (region && accessKeyId && secretAccessKey && this.fromEmail) {
       this.isEnabled = true;
       this.sesClient = new SESClient({
-        region: sesRegion,
+        region,
         credentials: {
-          accessKeyId: sesAccessKeyId,
-          secretAccessKey: sesSecretAccessKey,
+          accessKeyId,
+          secretAccessKey,
+          sessionToken,
         },
       });
       this.logger.log('Email service is enabled');
+      this.loadVerifiedEmails();
     } else {
-      this.logger.warn('Email service is disabled due to missing credentials');
+      this.logger.warn('Email service is disabled due to missing credentials or configuration');
     }
+  }
+
+  private async loadVerifiedEmails(): Promise<void> {
+    if (!this.isEnabled || !this.sesClient) {
+      return;
+    }
+
+    try {
+      const command = new ListVerifiedEmailAddressesCommand({});
+      const response = await this.sesClient.send(command);
+      
+      if (response.VerifiedEmailAddresses) {
+        this.verifiedEmails = new Set(response.VerifiedEmailAddresses);
+        this.logger.log(`Loaded ${this.verifiedEmails.size} verified email addresses`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to load verified emails: ${error.message}`);
+    }
+  }
+
+  private isEmailVerified(email: string): boolean {
+    return this.verifiedEmails.has(email);
   }
 
   private async sendEmail(to: string, subject: string, html: string, attachments?: any[]): Promise<boolean> {
     if (!this.isEnabled || !this.sesClient || !this.fromEmail) {
       this.logger.warn(`Email sending skipped: ${subject}`);
+      return false;
+    }
+
+    if (!this.isEmailVerified(to)) {
+      this.logger.warn(`Email ${to} is not verified. In sandbox mode, you can only send to verified emails.`);
+      this.logger.warn(`To verify this email, go to AWS SES console and add it as a verified identity.`);
       return false;
     }
 
@@ -68,7 +100,6 @@ export class MailService {
       };
 
       if (attachments && attachments.length > 0) {
-     
       }
 
       await this.sesClient.send(new SendEmailCommand(params));
@@ -111,7 +142,7 @@ export class MailService {
     }
     
     const token = this.generateVerificationToken(user.id, user.email);
-    const verificationLink = `${this.frontendUrl}/verify-email?token=${token}`;
+    const verificationLink = `${this.frontendUrl}/users/verify-email?token=${token}`;
     
     const html = `
       <h1>Welcome to Compass Event!</h1>
