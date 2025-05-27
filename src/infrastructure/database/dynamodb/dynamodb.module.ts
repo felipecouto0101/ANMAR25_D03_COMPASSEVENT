@@ -2,7 +2,7 @@ import { Module, OnModuleInit, Inject } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBService } from './dynamodb.service';
-import { createEventTable, createUserTable } from './dynamodb.utils';
+import { createEventTable, createUserTable, createRegistrationTable } from './dynamodb.utils';
 
 @Module({
   imports: [ConfigModule],
@@ -33,5 +33,6 @@ export class DynamoDBModule implements OnModuleInit {
   async onModuleInit() {
     await createEventTable(this.dynamoDBClient);
     await createUserTable(this.dynamoDBClient);
+    await createRegistrationTable(this.dynamoDBClient);
   }
 }
