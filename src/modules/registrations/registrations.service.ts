@@ -2,6 +2,8 @@ import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenExce
 import { Registration } from '../../domain/entities/registration.entity';
 import { RegistrationRepository } from '../../domain/repositories/registration.repository.interface';
 import { EventRepository } from '../../domain/repositories/event.repository.interface';
+import { UserRepository } from '../../domain/repositories/user.repository.interface';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { QueryRegistrationsDto } from './dto/query-registrations.dto';
@@ -14,6 +16,9 @@ export class RegistrationsService {
     private readonly registrationRepository: RegistrationRepository,
     @Inject('EventRepository')
     private readonly eventRepository: EventRepository,
+    @Inject('UserRepository')
+    private readonly userRepository: UserRepository,
+    private readonly mailService: MailService,
   ) {}
 
   async create(userId: string, createRegistrationDto: CreateRegistrationDto): Promise<RegistrationResponseDto> {
@@ -49,6 +54,12 @@ export class RegistrationsService {
     };
 
     const createdRegistration = await this.registrationRepository.create(newRegistration);
+    
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      await this.mailService.sendRegistrationConfirmationEmail(event, user);
+    }
+    
     return new RegistrationResponseDto(createdRegistration, event);
   }
 
@@ -95,6 +106,14 @@ export class RegistrationsService {
     };
 
     await this.registrationRepository.update(id, deactivatedRegistration);
+    
+    const user = await this.userRepository.findById(userId);
+    const event = await this.eventRepository.findById(registration.eventId);
+    
+    if (user && event) {
+      await this.mailService.sendRegistrationCancelledEmail(event, user);
+    }
+    
     return true;
   }
 }
