@@ -5,6 +5,7 @@ import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { EventsModule } from './modules/events/events.module';
 import { UsersModule } from './modules/users/users.module';
+import { RegistrationsModule } from './modules/registrations/registrations.module';
 import { SeedModule } from './seed/seed.module';
 import { SeedService } from './seed/seed.service';
 
@@ -14,6 +15,7 @@ import { SeedService } from './seed/seed.service';
     DatabaseModule,
     EventsModule,
     UsersModule,
+    RegistrationsModule,
     SeedModule,
   ],
   controllers: [AppController],
