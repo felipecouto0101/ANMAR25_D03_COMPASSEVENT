@@ -12,15 +12,19 @@ import {
   Request,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator
+  FileTypeValidator,
+  UseGuards
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 
 interface MulterFile {
   fieldname: string;
@@ -34,12 +38,15 @@ interface MulterFile {
   path?: string;
 }
 
+
 @ApiTags('users')
+@ApiBearerAuth('access-token')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
+  @Public()
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -62,6 +69,7 @@ export class UsersController {
   }
 
   @Get('verify-email')
+  @Public()
   @ApiOperation({ summary: 'Verify user email' })
   @ApiResponse({ status: 200, description: 'Email verified successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
@@ -71,6 +79,7 @@ export class UsersController {
   }
 
   @Get()
+  @Roles('admin')
   @ApiOperation({ summary: 'List all users with pagination and filters' })
   @ApiResponse({ status: 200, description: 'List of users returned successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - Only admins can list users' })
@@ -85,6 +94,7 @@ export class UsersController {
   }
 
   @Get(':id')
+  @UseGuards(OwnerGuard)
   @ApiOperation({ summary: 'Find a user by ID' })
   @ApiResponse({ status: 200, description: 'User found successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - Only admins or the user themselves can view user details' })
@@ -100,6 +110,7 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(OwnerGuard)
   @ApiOperation({ summary: 'Update a user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -129,6 +140,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(OwnerGuard)
   @ApiOperation({ summary: 'Deactivate a user (soft delete)' })
   @ApiResponse({ status: 200, description: 'User deactivated successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - Only admins or the user themselves can delete their account' })
