@@ -13,10 +13,11 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  Inject
+  Inject,
+  UseGuards
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -37,7 +38,11 @@ interface MulterFile {
   path?: string;
 }
 
+import { Roles } from '../auth/decorators/roles.decorator';
+import { EventOwnerGuard } from '../auth/guards/event-owner.guard';
+
 @ApiTags('events')
+@ApiBearerAuth('access-token')
 @Controller('events')
 export class EventsController {
   private adminId: string | null = null;
@@ -65,6 +70,7 @@ export class EventsController {
   }
 
   @Post()
+  @Roles('admin', 'organizer')
   @ApiOperation({ summary: 'Create a new event' })
   @ApiResponse({ status: 201, description: 'Event created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -133,6 +139,7 @@ export class EventsController {
   }
 
   @Patch(':id')
+  @UseGuards(EventOwnerGuard)
   @ApiOperation({ summary: 'Update an event' })
   @ApiResponse({ status: 200, description: 'Event updated successfully' })
   @ApiResponse({ status: 400, description: 'Bad request or insufficient permissions' })
@@ -190,6 +197,7 @@ export class EventsController {
   }
 
   @Delete(':id')
+  @UseGuards(EventOwnerGuard)
   @ApiOperation({ summary: 'Deactivate an event (soft delete)' })
   @ApiResponse({ status: 200, description: 'Event deactivated successfully' })
   @ApiResponse({ status: 400, description: 'Bad request or insufficient permissions' })
