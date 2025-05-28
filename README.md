@@ -4,7 +4,6 @@
 API para gerenciamento de eventos utilizando NestJS e DynamoDB.
 
 ## Estrutura do Projeto
-O projeto segue os princípios de Clean Architecture e Single Responsibility Principle (SRP):
 
 - **Domain**: Contém as entidades de negócio e interfaces de repositórios
 - **Application**: Contém os casos de uso da aplicação
@@ -12,8 +11,6 @@ O projeto segue os princípios de Clean Architecture e Single Responsibility Pri
 - **Presentation**: Controladores e DTOs
 
 ## Configuração do DynamoDB Local
-
-Para desenvolvimento local, você pode usar o DynamoDB Local:
 
 ```bash
 # Usando Docker
@@ -23,8 +20,6 @@ docker run -p 8000:8000 amazon/dynamodb-local
 ```
 
 ## Variáveis de Ambiente
-
-Configure as variáveis de ambiente no arquivo `.env`:
 
 ```
 AWS_REGION=us-east-1
