@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import * as sharp from 'sharp';
 import { ValidationException } from '../../../domain/exceptions/domain.exceptions';
 
@@ -21,30 +21,62 @@ export class S3Service {
   private readonly s3Client: S3Client;
   private readonly bucketName: string;
   private readonly logger = new Logger(S3Service.name);
-  private readonly isEnabled: boolean = false;
+  private isDevelopment: boolean = false;
+  private bucketInitialized: boolean = false;
 
   constructor(private readonly configService: ConfigService) {
-    const region = this.configService.get('AWS_REGION');
-    const accessKeyId = this.configService.get('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get('AWS_SECRET_ACCESS_KEY');
-    const sessionToken = this.configService.get('AWS_SESSION_TOKEN');
-    const bucketName = this.configService.get('AWS_S3_BUCKET_NAME');
+    const region = this.configService.get<string>('AWS_REGION');
+    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const sessionToken = this.configService.get<string>('AWS_SESSION_TOKEN');
+    const bucketNameConfig = this.configService.get<string>('AWS_S3_BUCKET_NAME');
 
-    if (region && accessKeyId && secretAccessKey && bucketName) {
-      this.isEnabled = true;
-      this.s3Client = new S3Client({
-        region,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-          sessionToken,
-        },
-      });
-      this.bucketName = bucketName;
-      this.logger.log('S3 service is enabled');
-    } else {
-      this.logger.warn('S3 service is disabled due to missing credentials or configuration');
+    if (!region || !accessKeyId || !secretAccessKey || !bucketNameConfig) {
+      this.logger.warn('Missing AWS credentials or S3 bucket configuration');
+      this.isDevelopment = true;
       this.bucketName = 'development-bucket';
+    } else {
+      this.bucketName = bucketNameConfig;
+    }
+
+    if (this.isDevelopment) {
+      this.s3Client = new S3Client({});
+    } else {
+      this.s3Client = new S3Client({
+        region: region as string,
+        credentials: {
+          accessKeyId: accessKeyId as string,
+          secretAccessKey: secretAccessKey as string,
+          ...(sessionToken ? { sessionToken } : {})
+        }
+      });
+    }
+
+    this.initializeBucket();
+  }
+
+  private async initializeBucket(): Promise<void> {
+    if (this.isDevelopment) {
+      this.bucketInitialized = true;
+      return;
+    }
+
+    try {
+      const createBucketCommand = new CreateBucketCommand({
+        Bucket: this.bucketName,
+      });
+
+      await this.s3Client.send(createBucketCommand);
+      this.logger.log(`Bucket ${this.bucketName} created successfully`);
+      this.bucketInitialized = true;
+    } catch (error) {
+      if (error.name === 'BucketAlreadyExists' || error.name === 'BucketAlreadyOwnedByYou') {
+        this.logger.log(`Bucket ${this.bucketName} already exists and is owned by you`);
+        this.bucketInitialized = true;
+      } else {
+        this.logger.error(`Failed to create bucket: ${error.message}`);
+        this.isDevelopment = true;
+      }
     }
   }
 
@@ -56,8 +88,8 @@ export class S3Service {
     }
 
     try {
-      if (!this.isEnabled) {
-        this.logger.warn('S3 upload skipped (service disabled), returning mock URL');
+      if (this.isDevelopment) {
+        this.logger.log(`Development mode: Skipping S3 upload for file: ${key}`);
         return `https://mock-s3-url.com/${key}`;
       }
       
@@ -72,7 +104,7 @@ export class S3Service {
         Bucket: this.bucketName,
         Key: key,
         Body: processedImageBuffer,
-        ContentType: file.mimetype,
+        ContentType: file.mimetype
       });
 
       await this.s3Client.send(command);
@@ -80,6 +112,12 @@ export class S3Service {
       return `https://${this.bucketName}.s3.amazonaws.com/${key}`;
     } catch (error) {
       this.logger.error(`Failed to upload file to S3: ${error.message}`);
+      
+      if (this.isDevelopment) {
+        this.logger.warn('Development mode: Returning mock URL despite error');
+        return `https://mock-s3-url.com/${key}`;
+      }
+      
       throw new ValidationException('Failed to process or upload image', {
         image: 'Please try with a different image file'
       });
