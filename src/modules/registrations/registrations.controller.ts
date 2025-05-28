@@ -6,9 +6,11 @@ import {
   Param, 
   Delete, 
   Query, 
-  Request
+  Request,
+  UseInterceptors
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { RegistrationsService } from './registrations.service';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { QueryRegistrationsDto } from './dto/query-registrations.dto';
@@ -21,10 +23,12 @@ export class RegistrationsController {
 
   @Post()
   @ApiOperation({ summary: 'Register for an event' })
+  @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 201, description: 'Registration created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request - Event is inactive or in the past' })
   @ApiResponse({ status: 404, description: 'Event not found' })
   @ApiResponse({ status: 409, description: 'User is already registered for this event' })
+  @UseInterceptors(FileInterceptor('none'))
   @ApiBody({ 
     type: CreateRegistrationDto,
     description: 'Event registration data',

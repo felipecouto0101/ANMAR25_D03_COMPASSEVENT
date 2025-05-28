@@ -69,7 +69,7 @@ export class RegistrationsService {
       eventId: createRegistrationDto.eventId,
       active: true,
       createdAt: now_iso,
-      updatedAt: now_iso,
+      updatedAt: now_iso
     };
 
     const createdRegistration = await this.registrationRepository.create(newRegistration);
