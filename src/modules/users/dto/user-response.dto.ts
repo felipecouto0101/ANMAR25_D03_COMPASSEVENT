@@ -20,6 +20,9 @@ export class UserResponseDto {
   @ApiProperty({ description: 'User profile image URL', required: false })
   profileImageUrl?: string;
 
+  @ApiProperty({ description: 'Email verification status' })
+  emailVerified: boolean;
+
   @ApiProperty({ description: 'User active status' })
   active: boolean;
 
@@ -36,6 +39,7 @@ export class UserResponseDto {
     this.phone = user.phone;
     this.role = user.role;
     this.profileImageUrl = user.profileImageUrl;
+    this.emailVerified = user.emailVerified;
     this.active = user.active;
     this.createdAt = user.createdAt;
     this.updatedAt = user.updatedAt;
