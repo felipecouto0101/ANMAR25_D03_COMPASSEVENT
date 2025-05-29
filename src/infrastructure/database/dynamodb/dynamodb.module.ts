@@ -1,8 +1,9 @@
 import { Module, OnModuleInit, Inject } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBService } from './dynamodb.service';
 import { createEventTable, createUserTable, createRegistrationTable } from './dynamodb.utils';
+import { ConfigModule } from '../../../config/config.module';
 
 @Module({
   imports: [ConfigModule],
@@ -11,10 +12,10 @@ import { createEventTable, createUserTable, createRegistrationTable } from './dy
       provide: 'DYNAMODB_CLIENT',
       useFactory: (configService: ConfigService) => {
         return new DynamoDBClient({
-          region: configService.get('AWS_REGION') || 'us-east-1',
+          region: configService.get('AWS_REGION', 'us-east-1'),
           credentials: {
-            accessKeyId: configService.get('AWS_ACCESS_KEY_ID') || 'dummy',
-            secretAccessKey: configService.get('AWS_SECRET_ACCESS_KEY') || 'dummy',
+            accessKeyId: configService.get('AWS_ACCESS_KEY_ID', ''),
+            secretAccessKey: configService.get('AWS_SECRET_ACCESS_KEY', ''),
             sessionToken: configService.get('AWS_SESSION_TOKEN'),
           },
         });
