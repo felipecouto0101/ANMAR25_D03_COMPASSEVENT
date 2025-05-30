@@ -5,12 +5,12 @@ import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/infrastructure/filters/exception.filter';
 import { CustomValidationPipe } from '../src/infrastructure/pipes/validation.pipe';
 
-// Test suite for authentication guards
+
 describe('Authentication Guards (e2e)', () => {
   let app: INestApplication;
   let authToken: string;
 
-  // Setup test application
+  
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -21,7 +21,7 @@ describe('Authentication Guards (e2e)', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
 
-    // Get auth token for tests
+  
     try {
       const loginResponse = await request(app.getHttpServer())
         .post('/auth/login')
@@ -42,9 +42,9 @@ describe('Authentication Guards (e2e)', () => {
     await app.close();
   });
 
-  // Test suite for JwtAuthGuard
+  
   describe('JwtAuthGuard', () => {
-    // Test for protected routes
+    
     describe('Protected Routes', () => {
       it('should deny access to users endpoint without authentication', () => {
         return request(app.getHttpServer())
@@ -62,13 +62,13 @@ describe('Authentication Guards (e2e)', () => {
         return request(app.getHttpServer())
           .get('/registrations')
           .expect((res) => {
-            // Aceita tanto 401 (não autorizado) quanto 404 (não encontrado)
+            
             expect([401, 404]).toContain(res.status);
           });
       });
 
       it('should allow access to protected routes with valid authentication', () => {
-        // Skip test if no auth token was obtained
+       
         if (!authToken) {
           return Promise.resolve();
         }
@@ -82,7 +82,7 @@ describe('Authentication Guards (e2e)', () => {
       });
     });
 
-    // Test for public routes
+   
     describe('Public Routes', () => {
       it('should allow access to login endpoint without authentication', () => {
         return request(app.getHttpServer())
@@ -92,22 +92,22 @@ describe('Authentication Guards (e2e)', () => {
             password: 'password',
           })
           .expect((res) => {
-            // O endpoint de login está retornando 401, mas o importante é que ele seja acessível
+            
             expect(res.status).toBeDefined();
           });
       });
     });
   });
 
-  // Test suite for RolesGuard
+  
   describe('RolesGuard', () => {
     it('should deny access to admin-only routes for non-admin users', async () => {
-      // Create a regular user
+     
       if (!authToken) {
         return;
       }
 
-      // Try to access admin-only functionality
+      
       const response = await request(app.getHttpServer())
         .post('/users')
         .set('Authorization', `Bearer ${authToken}`)
@@ -115,15 +115,14 @@ describe('Authentication Guards (e2e)', () => {
           name: 'Test User',
           email: 'newuser@example.com',
           password: 'Password123!',
-          role: 'admin' // Attempting to create an admin user
+          role: 'admin' 
         });
 
-      // Either the request will be forbidden (403) or the role will be ignored
+      
       expect([201, 403, 400]).toContain(response.status);
       
       if (response.status === 201) {
-        // If created, verify the user doesn't have admin role
-        // This is a fallback check in case the API doesn't properly restrict role assignment
+        
         expect(response.body.role).not.toBe('admin');
       }
     });
