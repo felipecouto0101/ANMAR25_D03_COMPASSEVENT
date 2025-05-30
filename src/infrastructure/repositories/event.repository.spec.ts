@@ -3,21 +3,27 @@ import { EventDynamoDBRepository } from './event.repository';
 import { DynamoDBService } from '../database/dynamodb/dynamodb.service';
 import { Event } from '../../domain/entities/event.entity';
 
+
+const createMockResponse = (items: any[] = []) => ({
+  $metadata: {},
+  Items: items
+});
+
 describe('EventDynamoDBRepository', () => {
   let repository: EventDynamoDBRepository;
   let dynamoDBService: jest.Mocked<DynamoDBService>;
 
   const mockEvent: Event = {
-    id: '1',
+    id: 'event-id',
     name: 'Test Event',
     description: 'Test Description',
-    date: '2025-01-01',
+    date: '2023-01-01T00:00:00.000Z',
     location: 'Test Location',
-    imageUrl: 'test.jpg',
+    imageUrl: 'https://example.com/image.jpg',
+    organizerId: 'user-id',
     active: true,
-    organizerId: 'org-1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: '2023-01-01T00:00:00.000Z',
+    updatedAt: '2023-01-01T00:00:00.000Z',
   };
 
   beforeEach(async () => {
@@ -48,11 +54,11 @@ describe('EventDynamoDBRepository', () => {
   });
 
   describe('findByDate', () => {
-    it('should return events for a specific date', async () => {
-      const date = '2025-01-01';
+    it('should find events by date', async () => {
+      const date = '2023-01-01T00:00:00.000Z';
       const mockEvents = [mockEvent];
       
-      dynamoDBService.query.mockResolvedValue({ Items: mockEvents, $metadata: {} });
+      dynamoDBService.query.mockResolvedValue(createMockResponse(mockEvents));
 
       const result = await repository.findByDate(date);
       
@@ -63,35 +69,39 @@ describe('EventDynamoDBRepository', () => {
         ExpressionAttributeNames: { '#date': 'date' },
         ExpressionAttributeValues: { ':date': date },
       });
+      
       expect(result).toEqual(mockEvents);
     });
 
     it('should return empty array when no events found', async () => {
-      dynamoDBService.query.mockResolvedValue({ Items: [], $metadata: {} });
+      dynamoDBService.query.mockResolvedValue(createMockResponse());
 
-      const result = await repository.findByDate('2025-01-01');
+      const result = await repository.findByDate('2023-01-01T00:00:00.000Z');
       
       expect(result).toEqual([]);
     });
   });
 
   describe('findByName', () => {
-    it('should return an event with matching name', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [mockEvent], $metadata: {} });
+    it('should find event by name', async () => {
+      const name = 'Test Event';
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
 
-      const result = await repository.findByName('Test Event');
+      const result = await repository.findByName(name);
       
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Events',
         FilterExpression: '#name = :name',
         ExpressionAttributeNames: { '#name': 'name' },
-        ExpressionAttributeValues: { ':name': 'Test Event' },
+        ExpressionAttributeValues: { ':name': name },
       });
+      
       expect(result).toEqual(mockEvent);
     });
 
     it('should return null when no event found', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [], $metadata: {} });
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([]));
 
       const result = await repository.findByName('Non-existent Event');
       
@@ -100,14 +110,16 @@ describe('EventDynamoDBRepository', () => {
   });
 
   describe('findWithFilters', () => {
-    it('should filter events by name', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [mockEvent], $metadata: {} });
-
-      const result = await repository.findWithFilters({
+    it('should find events with name filter', async () => {
+      const filters = {
         name: 'Test',
         page: 1,
         limit: 10,
-      });
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
+
+      const result = await repository.findWithFilters(filters);
       
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Events',
@@ -115,39 +127,51 @@ describe('EventDynamoDBRepository', () => {
         ExpressionAttributeNames: { '#name': 'name' },
         ExpressionAttributeValues: { ':name': 'Test' },
       });
-      expect(result).toEqual({ items: [mockEvent], total: 1 });
+      
+      expect(result).toEqual({
+        items: [mockEvent],
+        total: 1,
+      });
     });
 
-    it('should filter events by date range', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [mockEvent], $metadata: {} });
-
-      const result = await repository.findWithFilters({
-        startDate: '2025-01-01',
-        endDate: '2025-01-31',
+    it('should find events with date filters', async () => {
+      const filters = {
+        startDate: '2023-01-01T00:00:00.000Z',
+        endDate: '2023-12-31T23:59:59.999Z',
         page: 1,
         limit: 10,
-      });
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
+
+      const result = await repository.findWithFilters(filters);
       
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Events',
         FilterExpression: '#date >= :startDate AND #date <= :endDate',
         ExpressionAttributeNames: { '#date': 'date' },
         ExpressionAttributeValues: { 
-          ':startDate': '2025-01-01',
-          ':endDate': '2025-01-31'
+          ':startDate': '2023-01-01T00:00:00.000Z',
+          ':endDate': '2023-12-31T23:59:59.999Z'
         },
       });
-      expect(result).toEqual({ items: [mockEvent], total: 1 });
+      
+      expect(result).toEqual({
+        items: [mockEvent],
+        total: 1,
+      });
     });
 
-    it('should filter events by active status', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [mockEvent], $metadata: {} });
-
-      const result = await repository.findWithFilters({
+    it('should find events with active filter', async () => {
+      const filters = {
         active: true,
         page: 1,
         limit: 10,
-      });
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
+
+      const result = await repository.findWithFilters(filters);
       
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Events',
@@ -155,37 +179,72 @@ describe('EventDynamoDBRepository', () => {
         ExpressionAttributeNames: { '#active': 'active' },
         ExpressionAttributeValues: { ':active': true },
       });
-      expect(result).toEqual({ items: [mockEvent], total: 1 });
+      
+      expect(result).toEqual({
+        items: [mockEvent],
+        total: 1,
+      });
+    });
+
+    it('should find events with all filters', async () => {
+      const filters = {
+        name: 'Test',
+        startDate: '2023-01-01T00:00:00.000Z',
+        endDate: '2023-12-31T23:59:59.999Z',
+        active: true,
+        page: 1,
+        limit: 10,
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
+
+      const result = await repository.findWithFilters(filters);
+      
+      expect(dynamoDBService.scan).toHaveBeenCalled();
+      expect(result).toEqual({
+        items: [mockEvent],
+        total: 1,
+      });
     });
 
     it('should handle pagination correctly', async () => {
       const mockEvents = Array(15).fill(null).map((_, i) => ({
         ...mockEvent,
-        id: `${i + 1}`,
+        id: `event-id-${i}`,
       }));
       
-      dynamoDBService.scan.mockResolvedValue({ Items: mockEvents, $metadata: {} });
-
-      const result = await repository.findWithFilters({
+      const filters = {
         page: 2,
         limit: 5,
-      });
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse(mockEvents));
+
+      const result = await repository.findWithFilters(filters);
       
       expect(result.items.length).toBe(5);
-      expect(result.items[0].id).toBe('6');
+      expect(result.items[0].id).toBe('event-id-5');
       expect(result.total).toBe(15);
     });
 
-    it('should return empty result when no filters match', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [], $metadata: {} });
-
-      const result = await repository.findWithFilters({
-        name: 'Non-existent',
+    it('should handle no filters', async () => {
+      const filters = {
         page: 1,
         limit: 10,
+      };
+      
+      dynamoDBService.scan.mockResolvedValue(createMockResponse([mockEvent]));
+
+      const result = await repository.findWithFilters(filters);
+      
+      expect(dynamoDBService.scan).toHaveBeenCalledWith({
+        TableName: 'Events',
       });
       
-      expect(result).toEqual({ items: [], total: 0 });
+      expect(result).toEqual({
+        items: [mockEvent],
+        total: 1,
+      });
     });
   });
 });
