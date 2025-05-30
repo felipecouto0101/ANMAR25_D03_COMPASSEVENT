@@ -10,7 +10,7 @@ describe('Authentication Flow (e2e)', () => {
   let authToken: string;
   let userId: string;
 
-  // Setup test application
+  
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -26,9 +26,9 @@ describe('Authentication Flow (e2e)', () => {
     await app.close();
   });
 
-  // Test complete authentication flow
+  
   describe('Complete Authentication Flow', () => {
-    // Step 1: Login with admin credentials
+   
     it('should login with admin credentials', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/login')
@@ -37,17 +37,17 @@ describe('Authentication Flow (e2e)', () => {
           password: 'Admin@123',
         });
 
-      // Check if login was successful
+    
       if (response.status === 201 && response.body.accessToken) {
         authToken = response.body.accessToken;
         expect(authToken).toBeDefined();
       } else {
-        // If login failed, mark test as passed but log the issue
+       
         console.log('Admin login failed, skipping token-based tests');
       }
     });
 
-    // Step 2: Create a new user (requires admin privileges)
+    
     it('should create a new user with admin token', async () => {
       if (!authToken) {
         return Promise.resolve();
@@ -65,7 +65,7 @@ describe('Authentication Flow (e2e)', () => {
           role: 'user'
         });
 
-      // If user creation is successful, store the user ID
+      
       if (response.status === 201 && response.body.id) {
         userId = response.body.id;
         expect(userId).toBeDefined();
@@ -74,7 +74,7 @@ describe('Authentication Flow (e2e)', () => {
       }
     });
 
-    // Step 3: Get user details (requires authentication)
+    
     it('should get user details with valid token', async () => {
       if (!authToken || !userId) {
         return Promise.resolve();
@@ -91,7 +91,7 @@ describe('Authentication Flow (e2e)', () => {
         });
     });
 
-    // Step 4: Test token expiration or invalid token
+    
     it('should reject requests with invalid token', async () => {
       const invalidToken = 'invalid.token.string';
       
@@ -101,16 +101,16 @@ describe('Authentication Flow (e2e)', () => {
         .expect(401);
     });
 
-    // Step 5: Test accessing resources after token expiration (simulated)
+   
     it('should reject requests after token expiration (simulated)', async () => {
       if (!authToken) {
         return Promise.resolve();
       }
       
-      // Modify the token to simulate expiration
+      
       const tokenParts = authToken.split('.');
       if (tokenParts.length === 3) {
-        // Create an invalid token by changing the signature part
+        
         const invalidToken = `${tokenParts[0]}.${tokenParts[1]}.invalid`;
         
         await request(app.getHttpServer())
