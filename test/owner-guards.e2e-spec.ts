@@ -26,7 +26,7 @@ describe('Owner Guards (e2e)', () => {
     await app.init();
 
     try {
-      // Get admin token
+      
       const adminLoginResponse = await request(app.getHttpServer())
         .post('/auth/login')
         .send({
@@ -37,11 +37,11 @@ describe('Owner Guards (e2e)', () => {
       if (adminLoginResponse.status === 201 && adminLoginResponse.body.accessToken) {
         adminToken = adminLoginResponse.body.accessToken;
         
-        // Create two test users
+        
         const user1Email = `user1-${Date.now()}@example.com`;
         const user2Email = `user2-${Date.now()}@example.com`;
         
-        // Create user 1
+       
         const createUser1Response = await request(app.getHttpServer())
           .post('/users')
           .set('Authorization', `Bearer ${adminToken}`)
@@ -55,7 +55,7 @@ describe('Owner Guards (e2e)', () => {
         if (createUser1Response.status === 201) {
           user1Id = createUser1Response.body.id;
           
-          // Login as user 1
+          
           const user1LoginResponse = await request(app.getHttpServer())
             .post('/auth/login')
             .send({
@@ -68,7 +68,7 @@ describe('Owner Guards (e2e)', () => {
           }
         }
         
-        // Create user 2
+        
         const createUser2Response = await request(app.getHttpServer())
           .post('/users')
           .set('Authorization', `Bearer ${adminToken}`)
@@ -82,7 +82,7 @@ describe('Owner Guards (e2e)', () => {
         if (createUser2Response.status === 201) {
           user2Id = createUser2Response.body.id;
           
-          // Login as user 2
+          
           const user2LoginResponse = await request(app.getHttpServer())
             .post('/auth/login')
             .send({
@@ -95,7 +95,7 @@ describe('Owner Guards (e2e)', () => {
           }
         }
         
-        // Create an event as user 1
+        
         if (user1Token) {
           const createEventResponse = await request(app.getHttpServer())
             .post('/events')
@@ -109,7 +109,7 @@ describe('Owner Guards (e2e)', () => {
           if (createEventResponse.status === 201) {
             user1EventId = createEventResponse.body.id;
             
-            // Create a registration for user 1's event
+            
             if (user1EventId) {
               const createRegistrationResponse = await request(app.getHttpServer())
                 .post('/registrations')
@@ -161,7 +161,7 @@ describe('Owner Guards (e2e)', () => {
         .set('Authorization', `Bearer ${user2Token}`)
         .field('name', 'User 2 Trying to Update')
         .expect((res) => {
-          // Either 403 (forbidden) or 404 (not found)
+          
           expect([403, 404]).toContain(res.status);
         });
     });
@@ -204,7 +204,7 @@ describe('Owner Guards (e2e)', () => {
         .get(`/registrations/${user1RegistrationId}`)
         .set('Authorization', `Bearer ${user2Token}`)
         .expect((res) => {
-          // Either 403 (forbidden) or 404 (not found)
+          
           expect([403, 404]).toContain(res.status);
         });
     });
@@ -252,7 +252,7 @@ describe('Owner Guards (e2e)', () => {
           name: 'User 2 Trying to Update User 1'
         })
         .expect((res) => {
-          // Either 403 (forbidden) or 404 (not found)
+          
           expect([403, 404]).toContain(res.status);
         });
     });
