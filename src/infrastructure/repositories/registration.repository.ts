@@ -56,4 +56,30 @@ export class RegistrationDynamoDBRepository extends BaseDynamoDBRepository<Regis
       total,
     };
   }
+
+  async findByEventOrganizer(userId: string, page: number, limit: number): Promise<{ items: Registration[]; total: number }> {
+    const result = await this.dynamoDBService.scan({
+      TableName: this.tableName,
+      FilterExpression: '#active = :active',
+      ExpressionAttributeNames: {
+        '#active': 'active',
+      },
+      ExpressionAttributeValues: {
+        ':active': true,
+      },
+    });
+
+    const items = result.Items as Registration[];
+    
+    
+    const total = items.length;
+
+    const startIndex = (page - 1) * limit;
+    const paginatedItems = items.slice(startIndex, startIndex + limit);
+
+    return {
+      items: paginatedItems,
+      total,
+    };
+  }
 }

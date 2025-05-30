@@ -1,15 +1,14 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { DatabaseModule } from '../../infrastructure/database/database.module';
-import { MailModule } from '../../infrastructure/mail/mail.module';
+import { Module } from '@nestjs/common';
 import { RegistrationsService } from './registrations.service';
 import { RegistrationsController } from './registrations.controller';
 import { RegistrationDynamoDBRepository } from '../../infrastructure/repositories/registration.repository';
 import { EventDynamoDBRepository } from '../../infrastructure/repositories/event.repository';
 import { UserDynamoDBRepository } from '../../infrastructure/repositories/user.repository';
-import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../../infrastructure/mail/mail.module';
+import { DatabaseModule } from '../../infrastructure/database/database.module';
 
 @Module({
-  imports: [DatabaseModule, MailModule, forwardRef(() => AuthModule)],
+  imports: [DatabaseModule, MailModule],
   controllers: [RegistrationsController],
   providers: [
     RegistrationsService,
