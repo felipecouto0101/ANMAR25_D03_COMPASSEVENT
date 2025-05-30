@@ -3,25 +3,36 @@ import { Logger } from '@nestjs/common';
 import { SeedModule } from './seed.module';
 import { SeedService } from './seed.service';
 
-async function bootstrap() {
+export async function bootstrap() {
   const logger = new Logger('Seed');
   logger.log('Starting seed process...');
 
-  const app = await NestFactory.create(SeedModule);
-  const seedService = app.get(SeedService);
-  
+  let app;
   try {
+    app = await NestFactory.create(SeedModule);
+    const seedService = app.get(SeedService);
     await seedService.seed();
     logger.log('Seed process completed successfully');
   } catch (error) {
     logger.error(`Seed process failed: ${error.message}`);
   } finally {
-    await app.close();
+    if (app) {
+      try {
+        await app.close();
+      } catch (error) {
+        logger.error(`Error closing application: ${error.message}`);
+      }
+    }
   }
 }
 
-if (require.main === module) {
-  bootstrap();
+export const seedDatabase = bootstrap;
+
+export function isMainModule() {
+  return require.main === module;
 }
 
-export { bootstrap as seedDatabase };
+// Executar quando chamado diretamente
+if (isMainModule()) {
+  bootstrap();
+}
