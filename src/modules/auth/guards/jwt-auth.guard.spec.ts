@@ -4,15 +4,18 @@ import { Reflector } from '@nestjs/core';
 import { ExecutionContext } from '@nestjs/common';
 
 
-jest.mock('@nestjs/passport', () => {
-  class MockAuthGuard {
-    canActivate() {
-      return true;
-    }
-  }
 
+const mockSuperCanActivate = jest.fn().mockReturnValue(true);
+
+jest.mock('@nestjs/passport', () => {
   return {
-    AuthGuard: () => MockAuthGuard,
+    AuthGuard: () => {
+      return class {
+        canActivate() {
+          return mockSuperCanActivate();
+        }
+      };
+    },
   };
 });
 
@@ -37,6 +40,8 @@ describe('JwtAuthGuard', () => {
 
     guard = module.get<JwtAuthGuard>(JwtAuthGuard);
     reflector = module.get(Reflector);
+    
+    mockSuperCanActivate.mockClear();
   });
 
   it('should be defined', () => {
@@ -54,6 +59,21 @@ describe('JwtAuthGuard', () => {
 
       const result = guard.canActivate(mockContext);
 
+      expect(result).toBe(true);
+      expect(mockSuperCanActivate).not.toHaveBeenCalled();
+    });
+
+    it('should call super.canActivate for protected routes', () => {
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+      } as unknown as ExecutionContext;
+
+      reflector.getAllAndOverride.mockReturnValue(false);
+
+      const result = guard.canActivate(mockContext);
+
+      expect(mockSuperCanActivate).toHaveBeenCalled();
       expect(result).toBe(true);
     });
   });
