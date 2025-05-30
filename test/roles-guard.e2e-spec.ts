@@ -21,7 +21,7 @@ describe('Roles Guard (e2e)', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
 
-    // Get admin token
+    
     try {
       const adminLoginResponse = await request(app.getHttpServer())
         .post('/auth/login')
@@ -33,7 +33,7 @@ describe('Roles Guard (e2e)', () => {
       if (adminLoginResponse.status === 201 && adminLoginResponse.body.accessToken) {
         adminToken = adminLoginResponse.body.accessToken;
         
-        // Create a regular user for testing
+        
         const uniqueEmail = `user-${Date.now()}@example.com`;
         const createUserResponse = await request(app.getHttpServer())
           .post('/users')
@@ -48,7 +48,7 @@ describe('Roles Guard (e2e)', () => {
         if (createUserResponse.status === 201) {
           testUserId = createUserResponse.body.id;
           
-          // Login as the regular user
+          
           const userLoginResponse = await request(app.getHttpServer())
             .post('/auth/login')
             .send({
@@ -109,7 +109,7 @@ describe('Roles Guard (e2e)', () => {
           role: 'user'
         })
         .expect((res) => {
-          // Either 403 (forbidden) or 401 (unauthorized)
+          
           expect([401, 403]).toContain(res.status);
         });
     });
@@ -147,14 +147,14 @@ describe('Roles Guard (e2e)', () => {
         return Promise.resolve();
       }
 
-      // Try to access a different user ID
+      
       const differentUserId = 'non-existent-id';
       
       await request(app.getHttpServer())
         .get(`/users/${differentUserId}`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect((res) => {
-          // Either 403 (forbidden) or 404 (not found)
+         
           expect([403, 404]).toContain(res.status);
         });
     });
@@ -207,7 +207,7 @@ describe('Roles Guard (e2e)', () => {
         .delete(`/events/${eventId}`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect((res) => {
-          // Either 403 (forbidden) or 404 (not found)
+          
           expect([401, 403, 404]).toContain(res.status);
         });
     });
