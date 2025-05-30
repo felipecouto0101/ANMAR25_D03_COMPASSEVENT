@@ -1,3 +1,5 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { DatabaseModule } from './database.module';
 
 jest.mock('./dynamodb/dynamodb.module', () => {
   const DynamoDBModuleMock = function() {};
@@ -12,9 +14,6 @@ jest.mock('./dynamodb/dynamodb.module', () => {
   };
 });
 
-
-import { Test, TestingModule } from '@nestjs/testing';
-import { DatabaseModule } from './database.module';
 
 describe('DatabaseModule', () => {
   let module: TestingModule;

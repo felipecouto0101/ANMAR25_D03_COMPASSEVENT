@@ -1,4 +1,4 @@
-import { DynamoDBClient, CreateTableCommand } from '@aws-sdk/client-dynamodb';
+import { CreateTableCommand } from '@aws-sdk/client-dynamodb';
 import { createEventTable, createUserTable, createRegistrationTable } from './dynamodb.utils';
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({

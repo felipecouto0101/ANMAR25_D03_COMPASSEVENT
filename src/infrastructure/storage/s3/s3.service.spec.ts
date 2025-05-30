@@ -1,104 +1,222 @@
-// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { S3Service } from './s3.service';
-import { S3Client, PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
 import { ValidationException } from '../../../domain/exceptions/domain.exceptions';
-import { Logger } from '@nestjs/common';
 
-jest.mock('@aws-sdk/client-s3');
-jest.mock('sharp', () => ({
-  __esModule: true,
-  default: jest.fn().mockImplementation(() => ({
+jest.mock('@aws-sdk/client-s3', () => {
+  return {
+    S3Client: jest.fn().mockImplementation(() => ({
+      send: jest.fn().mockImplementation((command) => {
+        if (command.constructor.name === 'CreateBucketCommand') {
+          return Promise.resolve({});
+        }
+        return Promise.resolve({});
+      }),
+    })),
+    CreateBucketCommand: jest.fn(),
+    PutObjectCommand: jest.fn(),
+  };
+});
+
+jest.mock('sharp', () => {
+  return jest.fn().mockImplementation(() => ({
     resize: jest.fn().mockReturnThis(),
-    toBuffer: jest.fn().mockResolvedValue(Buffer.from('processed-image')),
-  })),
-}));
+    toBuffer: jest.fn().mockResolvedValue(Buffer.from('test')),
+  }));
+});
 
 describe('S3Service', () => {
   let service: S3Service;
-
-  const mockFile = {
-    fieldname: 'image',
-    originalname: 'test.jpg',
-    encoding: '7bit',
-    mimetype: 'image/jpeg',
-    buffer: Buffer.from('test'),
-    size: 1024,
-  };
+  let configService: ConfigService;
+  let s3ClientMock: any;
 
   beforeEach(async () => {
-    
-    service = {
-      uploadFile: jest.fn().mockImplementation((file, key) => {
-        if (!file || !file.buffer) {
-          throw new ValidationException('Invalid file provided', {
-            image: 'A valid image file is required'
-          });
-        }
-        return Promise.resolve(`https://test-bucket.s3.amazonaws.com/${key}`);
-      }),
-      isDevelopment: false,
-      bucketInitialized: true,
-      bucketName: 'test-bucket',
+    s3ClientMock = {
+      send: jest.fn().mockResolvedValue({}),
     };
-  });
+    
+    (S3Client as jest.Mock).mockImplementation(() => s3ClientMock);
+    
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        S3Service,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key) => {
+              const config = {
+                AWS_REGION: 'us-east-1',
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_S3_BUCKET_NAME: 'test-bucket',
+              };
+              return config[key];
+            }),
+          },
+        },
+      ],
+    }).compile();
 
-  afterEach(() => {
-    jest.clearAllMocks();
+    service = module.get<S3Service>(S3Service);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('uploadFile', () => {
-    it('should upload file to S3 and return URL', async () => {
-      const result = await service.uploadFile(mockFile, 'test-key');
-      expect(result).toBe('https://test-bucket.s3.amazonaws.com/test-key');
-    });
-    
-   
-    it('should throw ValidationException when file is not provided', async () => {
-      try {
-        await service.uploadFile(null, 'test-key');
-    
-        fail('Expected ValidationException to be thrown');
-      } catch (error) {
-        expect(error instanceof ValidationException).toBe(true);
-        expect(error.message).toBe('Invalid file provided');
-      }
-    });
+  it('should upload a file successfully', async () => {
+    const result = await service.uploadFile({
+      buffer: Buffer.from('test'),
+      mimetype: 'image/jpeg',
+      fieldname: 'file',
+      originalname: 'test.jpg',
+      encoding: '7bit',
+      size: 100,
+    }, 'test.jpg');
 
-    it('should throw ValidationException when file buffer is not provided', async () => {
-      try {
-        const fileWithoutBuffer = { ...mockFile, buffer: undefined };
-        await service.uploadFile(fileWithoutBuffer, 'test-key');
-        
-        fail('Expected ValidationException to be thrown');
-      } catch (error) {
-        expect(error instanceof ValidationException).toBe(true);
-        expect(error.message).toBe('Invalid file provided');
-      }
-    });
+    expect(result).toBe('https://test-bucket.s3.amazonaws.com/test.jpg');
   });
 
- 
-  describe('development mode', () => {
-    it('should return mock URL in development mode', async () => {
-      
-      service.isDevelopment = true;
-      service.uploadFile = jest.fn().mockImplementation((file, key) => {
-        if (!file || !file.buffer) {
-          throw new ValidationException('Invalid file provided', {
-            image: 'A valid image file is required'
-          });
-        }
-        return Promise.resolve(`https://mock-s3-url.com/${key}`);
-      });
+  it('should initialize in development mode when credentials are missing', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        S3Service,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined),
+          },
+        },
+      ],
+    }).compile();
 
-      const result = await service.uploadFile(mockFile, 'dev-key');
-      expect(result).toBe('https://mock-s3-url.com/dev-key');
-    });
+    const devService = moduleRef.get<S3Service>(S3Service);
+    expect(devService).toBeDefined();
+    
+    const result = await devService.uploadFile({
+      buffer: Buffer.from('test'),
+      mimetype: 'image/jpeg',
+      fieldname: 'file',
+      originalname: 'test.jpg',
+      encoding: '7bit',
+      size: 100,
+    }, 'test.jpg');
+    
+    expect(result).toBe('https://mock-s3-url.com/test.jpg');
+  });
+
+  it('should throw ValidationException when file is invalid', async () => {
+    await expect(service.uploadFile(null as any, 'test.jpg')).rejects.toThrow(ValidationException);
+    await expect(service.uploadFile({} as any, 'test.jpg')).rejects.toThrow(ValidationException);
+  });
+
+  it('should handle upload errors', async () => {
+    s3ClientMock.send.mockRejectedValueOnce(new Error('Upload failed'));
+    
+    await expect(service.uploadFile({
+      buffer: Buffer.from('test'),
+      mimetype: 'image/jpeg',
+      fieldname: 'file',
+      originalname: 'test.jpg',
+      encoding: '7bit',
+      size: 100,
+    }, 'test.jpg')).rejects.toThrow(ValidationException);
+  });
+
+  it('should handle bucket creation errors', async () => {
+    const errorMockS3Client = {
+      send: jest.fn().mockRejectedValueOnce(new Error('Bucket creation failed')).mockResolvedValue({}),
+    };
+    
+    (S3Client as jest.Mock).mockImplementationOnce(() => errorMockS3Client);
+    
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        S3Service,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key) => {
+              const config = {
+                AWS_REGION: 'us-east-1',
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_S3_BUCKET_NAME: 'test-bucket',
+              };
+              return config[key];
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    const errorService = moduleRef.get<S3Service>(S3Service);
+    expect(errorService).toBeDefined();
+  });
+
+  it('should handle bucket already exists case', async () => {
+    const bucketExistsError = { name: 'BucketAlreadyExists', message: 'Bucket already exists' };
+    const bucketMockS3Client = {
+      send: jest.fn().mockRejectedValueOnce(bucketExistsError).mockResolvedValue({}),
+    };
+    
+    (S3Client as jest.Mock).mockImplementationOnce(() => bucketMockS3Client);
+    
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        S3Service,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key) => {
+              const config = {
+                AWS_REGION: 'us-east-1',
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_S3_BUCKET_NAME: 'test-bucket',
+              };
+              return config[key];
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    const bucketService = moduleRef.get<S3Service>(S3Service);
+    expect(bucketService).toBeDefined();
+  });
+
+  it('should not throw error on upload failure in development mode', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        S3Service,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    const devService = moduleRef.get<S3Service>(S3Service);
+    const devMockS3Client = {
+      send: jest.fn().mockRejectedValueOnce(new Error('Upload failed')),
+    };
+    
+    (S3Client as jest.Mock).mockImplementationOnce(() => devMockS3Client);
+    
+    const result = await devService.uploadFile({
+      buffer: Buffer.from('test'),
+      mimetype: 'image/jpeg',
+      fieldname: 'file',
+      originalname: 'test.jpg',
+      encoding: '7bit',
+      size: 100,
+    }, 'test.jpg');
+    
+    expect(result).toBe('https://mock-s3-url.com/test.jpg');
   });
 });

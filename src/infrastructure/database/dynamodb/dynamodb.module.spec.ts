@@ -1,29 +1,13 @@
-
-jest.mock('@aws-sdk/lib-dynamodb', () => {
-  return {
-    DynamoDBDocumentClient: {
-      from: jest.fn().mockReturnValue({ send: jest.fn() }),
-    },
-  };
-});
-
-jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
-}));
-
-jest.mock('./dynamodb.utils', () => ({
-  createEventTable: jest.fn().mockResolvedValue(undefined),
-  createUserTable: jest.fn().mockResolvedValue(undefined),
-  createRegistrationTable: jest.fn().mockResolvedValue(undefined),
-}));
-
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { DynamoDBModule } from './dynamodb.module';
-import { DynamoDBService } from './dynamodb.service';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import * as dynamodbUtils from './dynamodb.utils';
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
+  DynamoDBClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn(),
+  })),
 }));
 
 jest.mock('./dynamodb.utils', () => ({
@@ -33,24 +17,47 @@ jest.mock('./dynamodb.utils', () => ({
 }));
 
 describe('DynamoDBModule', () => {
-  it('should be defined', async () => {
-    const module = await Test.createTestingModule({
+  let module: DynamoDBModule;
+  let mockDynamoDBClient: jest.Mocked<DynamoDBClient>;
+
+  beforeEach(async () => {
+    mockDynamoDBClient = {
+      send: jest.fn(),
+    } as any;
+
+    const moduleRef = await Test.createTestingModule({
       providers: [
+        DynamoDBModule,
         {
           provide: 'DYNAMODB_CLIENT',
-          useValue: {},
+          useValue: mockDynamoDBClient,
         },
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn().mockReturnValue('test-value'),
+            get: jest.fn().mockImplementation((key) => {
+              if (key === 'AWS_REGION') return 'us-east-1';
+              if (key === 'AWS_ACCESS_KEY_ID') return 'test-key';
+              if (key === 'AWS_SECRET_ACCESS_KEY') return 'test-secret';
+              return undefined;
+            }),
           },
         },
-        DynamoDBService,
       ],
     }).compile();
 
-    const service = module.get<DynamoDBService>(DynamoDBService);
-    expect(service).toBeDefined();
+    module = moduleRef.get<DynamoDBModule>(DynamoDBModule);
+  });
+
+  it('should be defined', () => {
+    expect(module).toBeDefined();
+  });
+
+  it('should initialize tables on module init', async () => {
+    await module.onModuleInit();
+    
+    expect(dynamodbUtils.createEventTable).toHaveBeenCalledWith(mockDynamoDBClient);
+    expect(dynamodbUtils.createUserTable).toHaveBeenCalledWith(mockDynamoDBClient);
+    expect(dynamodbUtils.createRegistrationTable).toHaveBeenCalledWith(mockDynamoDBClient);
   });
 });
