@@ -22,7 +22,6 @@ describe('Seed Module (e2e)', () => {
     seedService = moduleFixture.get<SeedService>(SeedService);
     await app.init();
 
-    // Obter token de admin para testes
     try {
       const loginResponse = await request(app.getHttpServer())
         .post('/auth/login')
@@ -35,7 +34,7 @@ describe('Seed Module (e2e)', () => {
         adminToken = loginResponse.body.accessToken;
       }
     } catch (error) {
-      console.log('Falha ao obter token de admin para testes');
+      console.log('Failed to obtain admin token for tests');
     }
   });
 
@@ -44,8 +43,7 @@ describe('Seed Module (e2e)', () => {
   });
 
   describe('Seed Functionality', () => {
-    it('deve criar usuário admin durante o seed', async () => {
-      // Verificar se o usuário admin existe após o seed
+    it('should create admin user during seed', async () => {
       if (!adminToken) {
         return Promise.resolve();
       }
@@ -56,11 +54,8 @@ describe('Seed Module (e2e)', () => {
 
       expect(response.status).toBe(200);
       
-      // Verificar se a resposta contém dados
       expect(response.body).toBeDefined();
       
-      // Verificar se existe pelo menos um usuário com role admin
-      // Verificar o formato da resposta antes de usar .some()
       let hasAdmin = false;
       if (Array.isArray(response.body)) {
         hasAdmin = response.body.some(user => user.role === 'admin');
@@ -70,22 +65,20 @@ describe('Seed Module (e2e)', () => {
       expect(hasAdmin).toBe(true);
     });
 
-    it('deve ser possível executar o seed manualmente', async () => {
-      // Testar a execução manual do seed
+    it('should be able to execute seed manually', async () => {
       try {
         await seedService.seed();
-        expect(true).toBe(true); // Se não lançar exceção, o teste passa
+        expect(true).toBe(true);
       } catch (error) {
-        fail('O seed falhou com erro: ' + error.message);
+        fail('Seed failed with error: ' + error.message);
       }
     });
 
-    it('deve verificar a existência de dados após o seed', async () => {
+    it('should verify data exists after seed', async () => {
       if (!adminToken) {
         return Promise.resolve();
       }
 
-      // Verificar eventos
       const eventsResponse = await request(app.getHttpServer())
         .get('/events')
         .set('Authorization', `Bearer ${adminToken}`);
@@ -93,7 +86,6 @@ describe('Seed Module (e2e)', () => {
       expect(eventsResponse.status).toBe(200);
       expect(eventsResponse.body).toBeDefined();
       
-      // Verificar usuários
       const usersResponse = await request(app.getHttpServer())
         .get('/users')
         .set('Authorization', `Bearer ${adminToken}`);
