@@ -8,7 +8,7 @@ import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { Public } from '../src/modules/auth/decorators/public.decorator';
 import { APP_GUARD } from '@nestjs/core';
 
-// Test controller with public and protected routes
+
 @Controller('test-public-decorator')
 class TestPublicDecoratorController {
   @Get('protected')
@@ -23,7 +23,7 @@ class TestPublicDecoratorController {
   }
 }
 
-// Test module that applies JwtAuthGuard globally
+
 @Module({
   controllers: [TestPublicDecoratorController],
   providers: [
@@ -74,7 +74,7 @@ describe('Public Decorator (e2e)', () => {
     let authToken: string;
 
     beforeAll(async () => {
-      // Get auth token for protected route tests
+      
       try {
         const loginResponse = await request(app.getHttpServer())
           .post('/auth/login')
@@ -92,7 +92,7 @@ describe('Public Decorator (e2e)', () => {
     });
 
     it('should allow access to protected routes with valid authentication', () => {
-      // Skip test if no auth token was obtained
+      
       if (!authToken) {
         return Promise.resolve();
       }
@@ -107,7 +107,7 @@ describe('Public Decorator (e2e)', () => {
     });
 
     it('should also allow access to public routes with valid authentication', () => {
-      // Skip test if no auth token was obtained
+      
       if (!authToken) {
         return Promise.resolve();
       }
