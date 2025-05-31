@@ -9,12 +9,19 @@ import { RegistrationsModule } from './modules/registrations/registrations.modul
 import { SeedModule } from './seed/seed.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SeedService } from './seed/seed.service';
+import { DynamoDBModule } from './infrastructure/database/dynamodb/dynamodb.module';
 
-jest.mock('./seed/seed.service', () => ({
-  SeedService: jest.fn().mockImplementation(() => ({
-    seed: jest.fn().mockResolvedValue(undefined),
-  })),
+
+jest.mock('./infrastructure/database/dynamodb/dynamodb.utils', () => ({
+  createEventTable: jest.fn().mockResolvedValue(undefined),
+  createUserTable: jest.fn().mockResolvedValue(undefined),
+  createRegistrationTable: jest.fn().mockResolvedValue(undefined),
 }));
+
+
+const mockSeedService = {
+  seed: jest.fn().mockResolvedValue(undefined),
+};
 
 describe('AppModule', () => {
   it('should be defined', () => {
@@ -39,16 +46,27 @@ describe('AppModule', () => {
   });
 
   it('should call seed method on module init', async () => {
-    const module = await Test.createTestingModule({
+   
+    const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+    .overrideProvider(SeedService)
+    .useValue(mockSeedService)
+    .compile();
 
-    const app = module.createNestApplication();
+   
+    const app = moduleRef.createNestApplication();
+    
+    
+    const dynamoDBModule = moduleRef.get(DynamoDBModule);
+    dynamoDBModule.onModuleInit = jest.fn();
+    
     await app.init();
 
-    const seedService = module.get<SeedService>(SeedService);
-    expect(seedService.seed).toHaveBeenCalled();
+   
+    expect(mockSeedService.seed).toHaveBeenCalled();
     
+
     await app.close();
   });
 });

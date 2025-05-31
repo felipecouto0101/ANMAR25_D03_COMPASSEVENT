@@ -32,7 +32,7 @@ export function isMainModule() {
   return require.main === module;
 }
 
-// Executar quando chamado diretamente
+
 if (isMainModule()) {
   bootstrap();
 }

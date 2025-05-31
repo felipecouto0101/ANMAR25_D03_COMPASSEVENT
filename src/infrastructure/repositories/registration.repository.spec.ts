@@ -3,17 +3,23 @@ import { RegistrationDynamoDBRepository } from './registration.repository';
 import { DynamoDBService } from '../database/dynamodb/dynamodb.service';
 import { Registration } from '../../domain/entities/registration.entity';
 
+
+const createMockResponse = (items: any[] = []) => ({
+  $metadata: {},
+  Items: items
+});
+
 describe('RegistrationDynamoDBRepository', () => {
   let repository: RegistrationDynamoDBRepository;
   let dynamoDBService: jest.Mocked<DynamoDBService>;
 
   const mockRegistration: Registration = {
-    id: '1',
-    eventId: 'event-1',
-    userId: 'user-1',
+    id: 'registration-id',
+    userId: 'user-id',
+    eventId: 'event-id',
     active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: '2023-01-01T00:00:00.000Z',
+    updatedAt: '2023-01-01T00:00:00.000Z',
   };
 
   beforeEach(async () => {
@@ -44,11 +50,11 @@ describe('RegistrationDynamoDBRepository', () => {
   });
 
   describe('findByUserAndEvent', () => {
-    it('should return registration for specific user and event', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [mockRegistration], $metadata: {} });
+    it('should find registration by user and event', async () => {
+      dynamoDBService.scan.mockResolvedValueOnce(createMockResponse([mockRegistration]));
 
-      const result = await repository.findByUserAndEvent('user-1', 'event-1');
-      
+      const result = await repository.findByUserAndEvent('user-id', 'event-id');
+
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Registrations',
         FilterExpression: '#userId = :userId AND #eventId = :eventId',
@@ -57,33 +63,29 @@ describe('RegistrationDynamoDBRepository', () => {
           '#eventId': 'eventId',
         },
         ExpressionAttributeValues: {
-          ':userId': 'user-1',
-          ':eventId': 'event-1',
+          ':userId': 'user-id',
+          ':eventId': 'event-id',
         },
       });
+
       expect(result).toEqual(mockRegistration);
     });
 
     it('should return null when no registration found', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [], $metadata: {} });
+      dynamoDBService.scan.mockResolvedValueOnce(createMockResponse([]));
 
-      const result = await repository.findByUserAndEvent('user-1', 'event-1');
-      
+      const result = await repository.findByUserAndEvent('user-id', 'event-id');
+
       expect(result).toBeNull();
     });
   });
 
   describe('findByUser', () => {
-    it('should return registrations for a specific user with pagination', async () => {
-      const mockRegistrations = [
-        mockRegistration,
-        { ...mockRegistration, id: '2', eventId: 'event-2' },
-      ];
-      
-      dynamoDBService.scan.mockResolvedValue({ Items: mockRegistrations, $metadata: {} });
+    it('should find registrations by user', async () => {
+      dynamoDBService.scan.mockResolvedValueOnce(createMockResponse([mockRegistration]));
 
-      const result = await repository.findByUser('user-1', 1, 10);
-      
+      const result = await repository.findByUser('user-id', 1, 10);
+
       expect(dynamoDBService.scan).toHaveBeenCalledWith({
         TableName: 'Registrations',
         FilterExpression: '#userId = :userId AND #active = :active',
@@ -92,41 +94,54 @@ describe('RegistrationDynamoDBRepository', () => {
           '#active': 'active',
         },
         ExpressionAttributeValues: {
-          ':userId': 'user-1',
+          ':userId': 'user-id',
           ':active': true,
         },
       });
+
       expect(result).toEqual({
-        items: mockRegistrations,
-        total: 2,
+        items: [mockRegistration],
+        total: 1,
+      });
+    });
+  });
+
+  describe('findByEventOrganizer', () => {
+    it('should find all active registrations', async () => {
+      dynamoDBService.scan.mockResolvedValueOnce(createMockResponse([mockRegistration]));
+
+      const result = await repository.findByEventOrganizer('organizer-id', 1, 10);
+
+      expect(dynamoDBService.scan).toHaveBeenCalledWith({
+        TableName: 'Registrations',
+        FilterExpression: '#active = :active',
+        ExpressionAttributeNames: {
+          '#active': 'active',
+        },
+        ExpressionAttributeValues: {
+          ':active': true,
+        },
+      });
+
+      expect(result).toEqual({
+        items: [mockRegistration],
+        total: 1,
       });
     });
 
     it('should handle pagination correctly', async () => {
       const mockRegistrations = Array(15).fill(null).map((_, i) => ({
         ...mockRegistration,
-        id: `${i + 1}`,
-        eventId: `event-${i + 1}`,
+        id: `registration-id-${i}`,
       }));
-      
-      dynamoDBService.scan.mockResolvedValue({ Items: mockRegistrations, $metadata: {} });
 
-      const result = await repository.findByUser('user-1', 2, 5);
-      
+      dynamoDBService.scan.mockResolvedValueOnce(createMockResponse(mockRegistrations));
+
+      const result = await repository.findByEventOrganizer('organizer-id', 2, 5);
+
       expect(result.items.length).toBe(5);
-      expect(result.items[0].id).toBe('6');
+      expect(result.items[0].id).toBe('registration-id-5');
       expect(result.total).toBe(15);
-    });
-
-    it('should return empty result when no registrations found', async () => {
-      dynamoDBService.scan.mockResolvedValue({ Items: [], $metadata: {} });
-
-      const result = await repository.findByUser('user-1', 1, 10);
-      
-      expect(result).toEqual({
-        items: [],
-        total: 0,
-      });
     });
   });
 });

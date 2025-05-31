@@ -48,6 +48,16 @@ describe('RegistrationRepository Interface', () => {
       
       return { items, total };
     }
+
+    async findByEventOrganizer(userId: string, page: number, limit: number): Promise<{ items: Registration[]; total: number }> {
+     
+      const total = this.registrations.length;
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const items = this.registrations.slice(start, end);
+      
+      return { items, total };
+    }
   }
 
   let repository: MockRegistrationRepository;
@@ -97,7 +107,6 @@ describe('RegistrationRepository Interface', () => {
     expect(result.items).toHaveLength(3);
     expect(result.total).toBe(3);
     
-
     result = await repository.findByUser('user-1', 1, 2);
     expect(result.items).toHaveLength(2);
     expect(result.total).toBe(3);
@@ -106,9 +115,30 @@ describe('RegistrationRepository Interface', () => {
     expect(result.items).toHaveLength(1);
     expect(result.total).toBe(3);
     
-    
     result = await repository.findByUser('non-existent-user', 1, 10);
     expect(result.items).toHaveLength(0);
     expect(result.total).toBe(0);
+  });
+
+  it('should find registrations by event organizer with pagination', async () => {
+    const registration1 = { ...testRegistration, id: '1', userId: 'user-1', eventId: 'event-1' };
+    const registration2 = { ...testRegistration, id: '2', userId: 'user-1', eventId: 'event-2' };
+    const registration3 = { ...testRegistration, id: '3', userId: 'user-2', eventId: 'event-1' };
+    
+    await repository.create(registration1);
+    await repository.create(registration2);
+    await repository.create(registration3);
+    
+    let result = await repository.findByEventOrganizer('organizer-id', 1, 10);
+    expect(result.items).toHaveLength(3);
+    expect(result.total).toBe(3);
+    
+    result = await repository.findByEventOrganizer('organizer-id', 1, 2);
+    expect(result.items).toHaveLength(2);
+    expect(result.total).toBe(3);
+    
+    result = await repository.findByEventOrganizer('organizer-id', 2, 2);
+    expect(result.items).toHaveLength(1);
+    expect(result.total).toBe(3);
   });
 });

@@ -71,7 +71,6 @@ export class RegistrationDynamoDBRepository extends BaseDynamoDBRepository<Regis
 
     const items = result.Items as Registration[];
     
-    
     const total = items.length;
 
     const startIndex = (page - 1) * limit;

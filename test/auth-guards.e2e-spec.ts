@@ -128,19 +128,19 @@ describe('Authentication Guards (e2e)', () => {
     });
   });
 
-  // Test suite for OwnerGuard
+
   describe('OwnerGuard', () => {
     it('should prevent accessing another user\'s data', async () => {
       if (!authToken) {
         return;
       }
 
-      // Try to access a non-existent user (which the current user doesn't own)
+     
       const response = await request(app.getHttpServer())
         .get('/users/non-existent-user-id')
         .set('Authorization', `Bearer ${authToken}`);
 
-      // Should either return 403 (forbidden) or 404 (not found)
+      
       expect([403, 404]).toContain(response.status);
     });
   });

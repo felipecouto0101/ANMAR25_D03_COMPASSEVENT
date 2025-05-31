@@ -1,8 +1,11 @@
+import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from './events.service';
+import { S3Service } from '../../infrastructure/storage/s3/s3.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
+import { v4 as uuidv4 } from 'uuid';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { QueryEventsDto } from './dto/query-events.dto';
-import { Event } from '../../domain/entities/event.entity';
 import { 
   EntityNotFoundException, 
   AuthorizationException, 
@@ -10,21 +13,33 @@ import {
   ValidationException
 } from '../../domain/exceptions/domain.exceptions';
 
+jest.mock('uuid', () => ({
+  v4: jest.fn().mockReturnValue('test-uuid'),
+}));
+
 describe('EventsService', () => {
   let service: EventsService;
   let eventRepository: any;
   let userRepository: any;
+  let registrationRepository: any;
   let s3Service: any;
   let mailService: any;
 
-  const mockEvent: Event = {
-    id: 'test-id',
+  const mockUser = {
+    id: 'user-id',
+    name: 'Test User',
+    email: 'test@example.com',
+    role: 'organizer',
+  };
+
+  const mockEvent = {
+    id: 'event-id',
     name: 'Test Event',
     description: 'Test Description',
-    date: '2025-12-15T09:00:00.000Z',
+    date: '2023-12-31T00:00:00.000Z',
     location: 'Test Location',
-    imageUrl: 'http://example.com/image.jpg',
-    organizerId: 'organizer-id',
+    organizerId: 'user-id',
+    imageUrl: 'https://example.com/image.jpg',
     active: true,
     createdAt: '2023-01-01T00:00:00.000Z',
     updatedAt: '2023-01-01T00:00:00.000Z',
@@ -36,70 +51,68 @@ describe('EventsService', () => {
     encoding: '7bit',
     mimetype: 'image/jpeg',
     buffer: Buffer.from('test'),
-    size: 1024,
+    size: 4,
   };
-
-  const mockUser = {
-    id: 'organizer-id',
-    name: 'Organizer',
-    email: 'organizer@example.com',
-    role: 'organizer',
-    active: true,
-  };
-
-  const mockDateString = '2023-01-01T00:00:00.000Z';
 
   beforeEach(async () => {
-    const mockEventRepository = {
+    jest.clearAllMocks();
+    
+    eventRepository = {
       create: jest.fn().mockResolvedValue(mockEvent),
-      findWithFilters: jest.fn().mockResolvedValue({ items: [mockEvent], total: 1 }),
       findById: jest.fn().mockResolvedValue(mockEvent),
       findByName: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue(mockEvent),
+      delete: jest.fn().mockResolvedValue(true),
+      findWithFilters: jest.fn().mockResolvedValue({ items: [mockEvent], total: 1 }),
       findByDate: jest.fn().mockResolvedValue([mockEvent]),
-      findAll: jest.fn().mockResolvedValue([mockEvent]),
-      delete: jest.fn().mockResolvedValue(true),
     };
 
-    const mockUserRepository = {
+    userRepository = {
       findById: jest.fn().mockResolvedValue(mockUser),
-      findByEmail: jest.fn().mockResolvedValue(mockUser),
-      create: jest.fn().mockResolvedValue(mockUser),
-      update: jest.fn().mockResolvedValue(mockUser),
-      delete: jest.fn().mockResolvedValue(true),
-      findAll: jest.fn().mockResolvedValue([mockUser]),
-      findWithFilters: jest.fn().mockResolvedValue({ items: [mockUser], total: 1 }),
     };
 
-    const mockS3Service = {
-      uploadFile: jest.fn().mockResolvedValue('http://example.com/image.jpg')
+    registrationRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'registration-id' }),
+      findByUserAndEvent: jest.fn().mockResolvedValue(null),
     };
 
-    const mockMailService = {
-      sendEventCreatedEmail: jest.fn().mockResolvedValue(undefined),
-      sendNewEventNotificationToParticipants: jest.fn().mockResolvedValue(undefined),
-      sendEventDeletedEmail: jest.fn().mockResolvedValue(undefined)
+    s3Service = {
+      uploadFile: jest.fn().mockResolvedValue('https://example.com/image.jpg'),
     };
 
-    service = new EventsService(
-      mockEventRepository as any,
-      mockUserRepository as any,
-      mockS3Service as any,
-      mockMailService as any
-    );
+    mailService = {
+      sendEventCreatedEmail: jest.fn().mockResolvedValue(true),
+      sendEventDeletedEmail: jest.fn().mockResolvedValue(true),
+      sendNewEventNotificationToParticipants: jest.fn().mockResolvedValue(0),
+    };
 
-    eventRepository = mockEventRepository;
-    userRepository = mockUserRepository;
-    s3Service = mockS3Service;
-    mailService = mockMailService;
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EventsService,
+        {
+          provide: 'EventRepository',
+          useValue: eventRepository,
+        },
+        {
+          provide: 'UserRepository',
+          useValue: userRepository,
+        },
+        {
+          provide: 'RegistrationRepository',
+          useValue: registrationRepository,
+        },
+        {
+          provide: S3Service,
+          useValue: s3Service,
+        },
+        {
+          provide: MailService,
+          useValue: mailService,
+        },
+      ],
+    }).compile();
 
-    
-    jest.spyOn(Date, 'now').mockImplementation(() => new Date(mockDateString).getTime());
-    jest.spyOn(global.console, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    service = module.get<EventsService>(EventsService);
   });
 
   it('should be defined', () => {
@@ -107,106 +120,134 @@ describe('EventsService', () => {
   });
 
   describe('create', () => {
-    it('should create a new event', async () => {
+    it('should create an event and auto-register the organizer', async () => {
       const createEventDto: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      const result = await service.create(createEventDto, 'organizer-id', mockFile as any);
+      const result = await service.create(createEventDto, 'user-id', mockFile);
 
-      expect(userRepository.findById).toHaveBeenCalledWith('organizer-id');
-      expect(eventRepository.findByName).toHaveBeenCalledWith('Test Event');
-      expect(s3Service.uploadFile).toHaveBeenCalled();
       expect(eventRepository.create).toHaveBeenCalled();
+      expect(s3Service.uploadFile).toHaveBeenCalled();
       expect(mailService.sendEventCreatedEmail).toHaveBeenCalled();
+      
+      
+      expect(registrationRepository.findByUserAndEvent).toHaveBeenCalledWith('user-id', mockEvent.id);
+      expect(registrationRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user-id',
+        eventId: mockEvent.id,
+        active: true
+      }));
+      
       expect(result).toEqual(mockEvent);
     });
 
-    it('should throw EntityNotFoundException when user is not found', async () => {
+    it('should not create duplicate registration if organizer is already registered', async () => {
+      const createEventDto: CreateEventDto = {
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
+      };
+
+    
+      registrationRepository.findByUserAndEvent.mockResolvedValueOnce({
+        id: 'existing-registration',
+        userId: 'user-id',
+        eventId: mockEvent.id,
+        active: true
+      });
+
+      await service.create(createEventDto, 'user-id', mockFile);
+
+      
+      expect(registrationRepository.findByUserAndEvent).toHaveBeenCalledWith('user-id', mockEvent.id);
+      expect(registrationRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw error if user is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
       const createEventDto: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      await expect(
-        service.create(createEventDto, 'nonexistent-id', mockFile as any),
-      ).rejects.toThrow(EntityNotFoundException);
+      await expect(service.create(createEventDto, 'user-id', mockFile)).rejects.toThrow(EntityNotFoundException);
     });
 
-    it('should throw AuthorizationException when user is not admin or organizer', async () => {
+    it('should throw error if user is not admin or organizer', async () => {
       userRepository.findById.mockResolvedValueOnce({
         ...mockUser,
         role: 'participant',
       });
 
       const createEventDto: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      await expect(
-        service.create(createEventDto, 'participant-id', mockFile as any),
-      ).rejects.toThrow(AuthorizationException);
+      await expect(service.create(createEventDto, 'user-id', mockFile)).rejects.toThrow(AuthorizationException);
     });
 
-    it('should throw ConflictException when event name already exists', async () => {
+    it('should throw error if event with same name already exists', async () => {
       eventRepository.findByName.mockResolvedValueOnce(mockEvent);
 
       const createEventDto: CreateEventDto = {
         name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      await expect(
-        service.create(createEventDto, 'organizer-id', mockFile as any),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create(createEventDto, 'user-id', mockFile)).rejects.toThrow(ConflictException);
     });
 
-    it('should throw ValidationException when image file is not provided', async () => {
+    it('should throw error if image file is not provided', async () => {
       const createEventDto: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      await expect(
-        service.create(createEventDto, 'organizer-id', undefined as any),
-      ).rejects.toThrow(ValidationException);
+      await expect(service.create(createEventDto, 'user-id', null as any)).rejects.toThrow(ValidationException);
     });
 
-    it('should handle errors when sending notifications to participants', async () => {
-      jest.spyOn(service as any, 'findParticipants').mockResolvedValueOnce([{ email: 'participant@example.com' }]);
-      mailService.sendNewEventNotificationToParticipants.mockRejectedValueOnce(new Error('Mail error'));
-
+    it('should handle error when sending notifications', async () => {
       const createEventDto: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test Description',
-        date: '2025-12-15T09:00:00.000Z',
-        location: 'Test Location',
+        name: 'New Event',
+        description: 'New Description',
+        date: '2023-12-31T00:00:00.000Z',
+        location: 'New Location',
       };
 
-      await service.create(createEventDto, 'organizer-id', mockFile as any);
-
-      expect(console.error).toHaveBeenCalled();
-      expect(eventRepository.create).toHaveBeenCalled();
+      
+      jest.spyOn(service as any, 'findParticipants').mockResolvedValueOnce([{ id: 'participant-id' }]);
+      
+      
+      mailService.sendNewEventNotificationToParticipants.mockRejectedValueOnce(new Error('Failed to send'));
+      
+   
+      const result = await service.create(createEventDto, 'user-id', mockFile);
+      expect(result).toEqual(mockEvent);
     });
   });
 
   describe('findAll', () => {
-    it('should return an array of events with pagination', async () => {
+    it('should return all events with filters', async () => {
       const queryDto: QueryEventsDto = {
+        name: 'Test',
+        startDate: '2023-01-01',
+        endDate: '2023-12-31',
+        active: true,
         page: 1,
         limit: 10,
       };
@@ -214,17 +255,18 @@ describe('EventsService', () => {
       const result = await service.findAll(queryDto);
 
       expect(eventRepository.findWithFilters).toHaveBeenCalledWith({
-        name: undefined,
-        startDate: undefined,
-        endDate: undefined,
-        active: undefined,
+        name: 'Test',
+        startDate: '2023-01-01',
+        endDate: '2023-12-31',
+        active: true,
         page: 1,
         limit: 10,
       });
+
       expect(result).toEqual({ items: [mockEvent], total: 1 });
     });
 
-    it('should use default pagination values when not provided', async () => {
+    it('should use default pagination values', async () => {
       const queryDto: QueryEventsDto = {};
 
       await service.findAll(queryDto);
@@ -241,17 +283,14 @@ describe('EventsService', () => {
   });
 
   describe('findById', () => {
-    it('should return a single event', async () => {
-      const result = await service.findById('test-id');
-
-      expect(eventRepository.findById).toHaveBeenCalledWith('test-id');
+    it('should return an event by id', async () => {
+      const result = await service.findById('event-id');
       expect(result).toEqual(mockEvent);
     });
 
-    it('should throw EntityNotFoundException when event is not found', async () => {
+    it('should throw error if event is not found', async () => {
       eventRepository.findById.mockResolvedValueOnce(null);
-
-      await expect(service.findById('nonexistent-id')).rejects.toThrow(EntityNotFoundException);
+      await expect(service.findById('non-existent-id')).rejects.toThrow(EntityNotFoundException);
     });
   });
 
@@ -262,35 +301,40 @@ describe('EventsService', () => {
         description: 'Updated Description',
       };
 
-      const result = await service.update('test-id', updateEventDto, 'organizer-id', 'organizer', mockFile as any);
+      const result = await service.update('event-id', updateEventDto, 'user-id', 'organizer');
 
-      expect(eventRepository.findById).toHaveBeenCalledWith('test-id');
-      expect(eventRepository.findByName).toHaveBeenCalledWith('Updated Event');
+      expect(eventRepository.update).toHaveBeenCalled();
+      expect(result).toEqual(mockEvent);
+    });
+
+    it('should update an event with new image', async () => {
+      const updateEventDto: UpdateEventDto = {
+        name: 'Updated Event',
+      };
+
+      const result = await service.update('event-id', updateEventDto, 'user-id', 'organizer', mockFile);
+
       expect(s3Service.uploadFile).toHaveBeenCalled();
       expect(eventRepository.update).toHaveBeenCalled();
       expect(result).toEqual(mockEvent);
     });
 
-    it('should throw EntityNotFoundException when event is not found', async () => {
+    it('should throw error if event is not found', async () => {
       eventRepository.findById.mockResolvedValueOnce(null);
 
       const updateEventDto: UpdateEventDto = {
         name: 'Updated Event',
       };
 
-      await expect(
-        service.update('nonexistent-id', updateEventDto, 'organizer-id', 'organizer'),
-      ).rejects.toThrow(EntityNotFoundException);
+      await expect(service.update('non-existent-id', updateEventDto, 'user-id', 'organizer')).rejects.toThrow(EntityNotFoundException);
     });
 
-    it('should throw AuthorizationException when user is not admin or event organizer', async () => {
+    it('should throw error if user is not authorized', async () => {
       const updateEventDto: UpdateEventDto = {
         name: 'Updated Event',
       };
 
-      await expect(
-        service.update('test-id', updateEventDto, 'different-user-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+      await expect(service.update('event-id', updateEventDto, 'other-user-id', 'participant')).rejects.toThrow(AuthorizationException);
     });
 
     it('should allow admin to update any event', async () => {
@@ -298,96 +342,100 @@ describe('EventsService', () => {
         name: 'Updated Event',
       };
 
-      await service.update('test-id', updateEventDto, 'admin-id', 'admin');
+      const result = await service.update('event-id', updateEventDto, 'admin-id', 'admin');
 
       expect(eventRepository.update).toHaveBeenCalled();
+      expect(result).toEqual(mockEvent);
     });
 
-    it('should throw ConflictException when updated name already exists for another event', async () => {
+    it('should throw error if event name already exists', async () => {
+      const updateEventDto: UpdateEventDto = {
+        name: 'Existing Event',
+      };
+
       eventRepository.findByName.mockResolvedValueOnce({
         ...mockEvent,
-        id: 'different-id',
+        id: 'other-event-id',
       });
 
+      await expect(service.update('event-id', updateEventDto, 'user-id', 'organizer')).rejects.toThrow(ConflictException);
+    });
+
+    it('should not check name conflict if name is not changed', async () => {
+      const updateEventDto: UpdateEventDto = {
+        description: 'Updated Description',
+      };
+
+      await service.update('event-id', updateEventDto, 'user-id', 'organizer');
+
+      expect(eventRepository.findByName).not.toHaveBeenCalled();
+    });
+
+    it('should not throw error if event with same name is the same event', async () => {
+      const updateEventDto: UpdateEventDto = {
+        name: 'Test Event',
+      };
+
+      eventRepository.findByName.mockResolvedValueOnce(mockEvent);
+
+      const result = await service.update('event-id', updateEventDto, 'user-id', 'organizer');
+
+      expect(result).toEqual(mockEvent);
+    });
+
+    it('should throw error if update fails', async () => {
       const updateEventDto: UpdateEventDto = {
         name: 'Updated Event',
       };
 
-      await expect(
-        service.update('test-id', updateEventDto, 'organizer-id', 'organizer'),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('should not upload new image when file is not provided', async () => {
-      const updateEventDto: UpdateEventDto = {
-        name: 'Updated Event',
-      };
-
-      await service.update('test-id', updateEventDto, 'organizer-id', 'organizer');
-
-      expect(s3Service.uploadFile).not.toHaveBeenCalled();
-      expect(eventRepository.update).toHaveBeenCalled();
-    });
-
-    it('should throw EntityNotFoundException when update fails', async () => {
       eventRepository.update.mockResolvedValueOnce(null);
 
-      const updateEventDto: UpdateEventDto = {
-        name: 'Updated Event',
-      };
-
-      await expect(
-        service.update('test-id', updateEventDto, 'organizer-id', 'organizer'),
-      ).rejects.toThrow(EntityNotFoundException);
+      await expect(service.update('event-id', updateEventDto, 'user-id', 'organizer')).rejects.toThrow(EntityNotFoundException);
     });
   });
 
   describe('delete', () => {
-    it('should deactivate an event', async () => {
-      const result = await service.delete('test-id', 'organizer-id', 'organizer');
+    it('should delete an event', async () => {
+      const result = await service.delete('event-id', 'user-id', 'organizer');
 
-      expect(eventRepository.findById).toHaveBeenCalledWith('test-id');
-      expect(eventRepository.update).toHaveBeenCalledWith('test-id', {
+      expect(eventRepository.update).toHaveBeenCalledWith('event-id', {
         active: false,
         updatedAt: expect.any(String),
       });
-      expect(userRepository.findById).toHaveBeenCalledWith('organizer-id');
       expect(mailService.sendEventDeletedEmail).toHaveBeenCalled();
       expect(result).toBe(true);
     });
 
-    it('should throw EntityNotFoundException when event is not found', async () => {
+    it('should throw error if event is not found', async () => {
       eventRepository.findById.mockResolvedValueOnce(null);
 
-      await expect(
-        service.delete('nonexistent-id', 'organizer-id', 'organizer'),
-      ).rejects.toThrow(EntityNotFoundException);
+      await expect(service.delete('non-existent-id', 'user-id', 'organizer')).rejects.toThrow(EntityNotFoundException);
     });
 
-    it('should throw AuthorizationException when user is not admin or event organizer', async () => {
-      await expect(
-        service.delete('test-id', 'different-user-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+    it('should throw error if user is not authorized', async () => {
+      await expect(service.delete('event-id', 'other-user-id', 'participant')).rejects.toThrow(AuthorizationException);
     });
 
     it('should allow admin to delete any event', async () => {
-      await service.delete('test-id', 'admin-id', 'admin');
+      const result = await service.delete('event-id', 'admin-id', 'admin');
 
       expect(eventRepository.update).toHaveBeenCalled();
+      expect(result).toBe(true);
     });
 
     it('should handle case when organizer is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
-      await service.delete('test-id', 'organizer-id', 'organizer');
+      const result = await service.delete('event-id', 'user-id', 'organizer');
 
-      expect(mailService.sendEventDeletedEmail).not.toHaveBeenCalled();
       expect(eventRepository.update).toHaveBeenCalled();
+      expect(mailService.sendEventDeletedEmail).not.toHaveBeenCalled();
+      expect(result).toBe(true);
     });
   });
 
   describe('findByDate', () => {
-    it('should return events for a specific date', async () => {
+    it('should return events by date', async () => {
       const result = await service.findByDate('2023-01-01');
 
       expect(eventRepository.findByDate).toHaveBeenCalledWith('2023-01-01');

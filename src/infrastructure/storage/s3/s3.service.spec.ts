@@ -6,7 +6,6 @@ import { ValidationException } from '../../../domain/exceptions/domain.exception
 
 
 const mockSend = jest.fn();
-
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation(() => ({
     send: mockSend,
@@ -14,12 +13,16 @@ jest.mock('@aws-sdk/client-s3', () => ({
   PutObjectCommand: jest.fn(),
 }));
 
+
 jest.mock('sharp', () => {
   return jest.fn().mockImplementation(() => ({
     resize: jest.fn().mockReturnThis(),
     toBuffer: jest.fn().mockResolvedValue(Buffer.from('processed-image')),
   }));
 });
+
+
+const mockSharp = require('sharp');
 
 describe('S3Service', () => {
   let service: S3Service;
@@ -93,6 +96,103 @@ describe('S3Service', () => {
       const isDevelopment = (devService as any).isDevelopment;
       expect(isDevelopment).toBe(true);
     });
+
+    it('should initialize in development mode when access key is missing', async () => {
+      jest.clearAllMocks();
+      
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'AWS_ACCESS_KEY_ID') return undefined;
+        return mockConfig[key];
+      });
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          S3Service,
+          {
+            provide: ConfigService,
+            useValue: mockConfigService,
+          },
+        ],
+      }).compile();
+
+      const devService = module.get<S3Service>(S3Service);
+      const isDevelopment = (devService as any).isDevelopment;
+      expect(isDevelopment).toBe(true);
+    });
+
+    it('should initialize in development mode when secret key is missing', async () => {
+      jest.clearAllMocks();
+      
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'AWS_SECRET_ACCESS_KEY') return undefined;
+        return mockConfig[key];
+      });
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          S3Service,
+          {
+            provide: ConfigService,
+            useValue: mockConfigService,
+          },
+        ],
+      }).compile();
+
+      const devService = module.get<S3Service>(S3Service);
+      const isDevelopment = (devService as any).isDevelopment;
+      expect(isDevelopment).toBe(true);
+    });
+
+    it('should initialize in development mode when bucket name is missing', async () => {
+      jest.clearAllMocks();
+      
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'AWS_S3_BUCKET_NAME') return undefined;
+        return mockConfig[key];
+      });
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          S3Service,
+          {
+            provide: ConfigService,
+            useValue: mockConfigService,
+          },
+        ],
+      }).compile();
+
+      const devService = module.get<S3Service>(S3Service);
+      const isDevelopment = (devService as any).isDevelopment;
+      expect(isDevelopment).toBe(true);
+      expect((devService as any).bucketName).toBe('development-bucket');
+    });
+
+    it('should initialize S3Client without session token when not provided', async () => {
+      jest.clearAllMocks();
+      
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'AWS_SESSION_TOKEN') return undefined;
+        return mockConfig[key];
+      });
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          S3Service,
+          {
+            provide: ConfigService,
+            useValue: mockConfigService,
+          },
+        ],
+      }).compile();
+
+      expect(S3Client).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        credentials: {
+          accessKeyId: 'test-key',
+          secretAccessKey: 'test-secret',
+        },
+      });
+    });
   });
 
   describe('uploadFile', () => {
@@ -108,6 +208,11 @@ describe('S3Service', () => {
     it('should throw error when file is invalid', async () => {
       await expect(service.uploadFile(null as any, 'test-key')).rejects.toThrow(ValidationException);
       await expect(service.uploadFile({} as any, 'test-key')).rejects.toThrow(ValidationException);
+    });
+
+    it('should throw error when buffer is missing', async () => {
+      const fileWithoutBuffer = { ...mockFile, buffer: undefined };
+      await expect(service.uploadFile(fileWithoutBuffer as any, 'test-key')).rejects.toThrow(ValidationException);
     });
 
     it('should upload file successfully', async () => {
@@ -153,6 +258,35 @@ describe('S3Service', () => {
       const devService = module.get<S3Service>(S3Service);
       const result = await devService.uploadFile(mockFile, 'test-key');
       
+      expect(result).toBe('https://mock-s3-url.com/test-key');
+    });
+
+    it('should return mock URL in development mode even when error occurs', async () => {
+      jest.clearAllMocks();
+      
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'AWS_REGION') return undefined;
+        return mockConfig[key];
+      });
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          S3Service,
+          {
+            provide: ConfigService,
+            useValue: mockConfigService,
+          },
+        ],
+      }).compile();
+
+      const devService = module.get<S3Service>(S3Service);
+      
+    
+      mockSharp.mockImplementationOnce(() => {
+        throw new Error('Sharp processing error');
+      });
+      
+      const result = await devService.uploadFile(mockFile, 'test-key');
       expect(result).toBe('https://mock-s3-url.com/test-key');
     });
   });
