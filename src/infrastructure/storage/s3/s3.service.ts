@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as sharp from 'sharp';
 import { ValidationException } from '../../../domain/exceptions/domain.exceptions';
 
@@ -21,8 +21,7 @@ export class S3Service {
   private readonly s3Client: S3Client;
   private readonly bucketName: string;
   private readonly logger = new Logger(S3Service.name);
-  private isDevelopment: boolean = false;
-  private bucketInitialized: boolean = false;
+  private readonly isDevelopment: boolean = false;
 
   constructor(private readonly configService: ConfigService) {
     const region = this.configService.get<string>('AWS_REGION');
@@ -50,33 +49,6 @@ export class S3Service {
           ...(sessionToken ? { sessionToken } : {})
         }
       });
-    }
-
-    this.initializeBucket();
-  }
-
-  private async initializeBucket(): Promise<void> {
-    if (this.isDevelopment) {
-      this.bucketInitialized = true;
-      return;
-    }
-
-    try {
-      const createBucketCommand = new CreateBucketCommand({
-        Bucket: this.bucketName,
-      });
-
-      await this.s3Client.send(createBucketCommand);
-      this.logger.log(`Bucket ${this.bucketName} created successfully`);
-      this.bucketInitialized = true;
-    } catch (error) {
-      if (error.name === 'BucketAlreadyExists' || error.name === 'BucketAlreadyOwnedByYou') {
-        this.logger.log(`Bucket ${this.bucketName} already exists and is owned by you`);
-        this.bucketInitialized = true;
-      } else {
-        this.logger.error(`Failed to create bucket: ${error.message}`);
-        this.isDevelopment = true;
-      }
     }
   }
 
@@ -113,6 +85,7 @@ export class S3Service {
     } catch (error) {
       this.logger.error(`Failed to upload file to S3: ${error.message}`);
       
+      /* istanbul ignore next */
       if (this.isDevelopment) {
         this.logger.warn('Development mode: Returning mock URL despite error');
         return `https://mock-s3-url.com/${key}`;

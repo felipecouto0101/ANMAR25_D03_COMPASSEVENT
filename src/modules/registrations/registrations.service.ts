@@ -79,10 +79,25 @@ export class RegistrationsService {
   }
 
   async findAll(userId: string, queryDto: QueryRegistrationsDto, requestUserId: string): Promise<{ items: RegistrationResponseDto[]; total: number }> {
-    if (userId !== requestUserId) {
-      throw new AuthorizationException('You can only view your own registrations');
+    
+    if (userId === requestUserId) {
+      return this.findUserRegistrations(userId, queryDto);
     }
-
+    
+    
+    const user = await this.userRepository.findById(requestUserId);
+    if (!user) {
+      throw new EntityNotFoundException('User', requestUserId);
+    }
+    
+    if (user.role === 'organizer' || user.role === 'admin') {
+      return this.findOrganizerEventRegistrations(requestUserId, queryDto);
+    }
+    
+    throw new AuthorizationException('You can only view your own registrations');
+  }
+  
+  private async findUserRegistrations(userId: string, queryDto: QueryRegistrationsDto): Promise<{ items: RegistrationResponseDto[]; total: number }> {
     const result = await this.registrationRepository.findByUser(
       userId,
       queryDto.page || 1,
@@ -102,6 +117,53 @@ export class RegistrationsService {
     return {
       items: registrationsWithEvents,
       total: result.total,
+    };
+  }
+  
+  private async findOrganizerEventRegistrations(organizerId: string, queryDto: QueryRegistrationsDto): Promise<{ items: RegistrationResponseDto[]; total: number }> {
+     
+    const events = await this.eventRepository.findWithFilters({
+      page: 1,
+      limit: 1000, 
+      active: true,
+    });
+    
+    const organizerEvents = events.items.filter(event => event.organizerId === organizerId);
+    
+    if (organizerEvents.length === 0) {
+      return { items: [], total: 0 };
+    }
+    
+    const allRegistrations = await this.registrationRepository.findByEventOrganizer(
+      organizerId,
+      queryDto.page || 1,
+      queryDto.limit || 10
+    );
+    
+   
+    const eventIds = organizerEvents.map(event => event.id);
+    
+   
+    const filteredRegistrations: Registration[] = [];
+    for (const registration of allRegistrations.items as Registration[]) {
+      if (eventIds.includes(registration.eventId)) {
+        filteredRegistrations.push(registration);
+      }
+    }
+    
+    const registrationsWithEvents = await Promise.all(
+      filteredRegistrations.map(async (registration) => {
+        const event = organizerEvents.find(e => e.id === registration.eventId);
+        if (!event) {
+          throw new EntityNotFoundException('Event', registration.eventId);
+        }
+        return new RegistrationResponseDto(registration, event);
+      })
+    );
+    
+    return {
+      items: registrationsWithEvents,
+      total: filteredRegistrations.length,
     };
   }
 

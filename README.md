@@ -1,59 +1,60 @@
-# ANMAR25_D03_COMPASSEVENT
+# Compass Event
 
-## Descrição
-API para gerenciamento de eventos utilizando NestJS e DynamoDB.
+A event management system built with NestJS, AWS DynamoDB, and AWS S3.
 
-## Estrutura do Projeto
+## Infrastructure
 
-- **Domain**: Contém as entidades de negócio e interfaces de repositórios
-- **Application**: Contém os casos de uso da aplicação
-- **Infrastructure**: Contém implementações concretas (DynamoDB, repositórios)
-- **Presentation**: Controladores e DTOs
+This project uses AWS CDK to define and provision infrastructure:
 
-## Configuração do DynamoDB Local
+### DynamoDB Tables
+- **Events**: Stores event information
+- **Users**: Stores user accounts
+- **Registrations**: Stores event registrations
 
-```bash
-# Usando Docker
-docker run -p 8000:8000 amazon/dynamodb-local
+### S3 Bucket
+- **compass-event-images**: Stores event images
 
-# Ou baixe e execute o DynamoDB Local manualmente
+## Setup
+
+### Prerequisites
+- Node.js 16+
+- AWS CLI configured
+- AWS CDK installed (`npm install -g aws-cdk`)
+
+### Environment Variables
+Copy the example environment file:
+```
+cp .env.example .env
 ```
 
-## Variáveis de Ambiente
+Update the values in `.env` with your configuration.
 
+### Deploy Infrastructure
 ```
-AWS_REGION=us-east-1
-DYNAMODB_ENDPOINT=http://localhost:8000
-```
-
-## Instalação
-
-```bash
+cd infra
 npm install
+cdk deploy CompassEventDynamoDBStack CompassEventS3Stack
 ```
 
-## Executando a aplicação
-
-```bash
-# development
-npm run start
-
-# watch mode
+### Run Application
+```
+npm install
 npm run start:dev
-
-# production mode
-npm run start:prod
 ```
 
-## Testes
+## Architecture
 
-```bash
-# unit tests
+This project follows Clean Architecture principles:
+
+- **Domain**: Core business logic and entities
+- **Application**: Use cases and application services
+- **Infrastructure**: External services and adapters
+- **Interfaces**: Controllers and DTOs
+
+## Testing
+
+```
 npm run test
-
-# e2e tests
 npm run test:e2e
-
-# test coverage
 npm run test:cov
 ```
