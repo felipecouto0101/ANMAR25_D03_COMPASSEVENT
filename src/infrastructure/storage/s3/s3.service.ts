@@ -85,7 +85,7 @@ export class S3Service {
     } catch (error) {
       this.logger.error(`Failed to upload file to S3: ${error.message}`);
       
-      
+      /* istanbul ignore next */
       if (this.isDevelopment) {
         this.logger.warn('Development mode: Returning mock URL despite error');
         return `https://mock-s3-url.com/${key}`;

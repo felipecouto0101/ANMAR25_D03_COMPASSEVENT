@@ -8,8 +8,11 @@ export class S3Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+   
+    const bucketName = process.env.AWS_S3_BUCKET_NAME || 'compass-event';
+
     this.bucket = new s3.Bucket(this, 'EventImagesBucket', {
-      bucketName: 'compass-event-images',
+      bucketName: bucketName,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       cors: [
         {
