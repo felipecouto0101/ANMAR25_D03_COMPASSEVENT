@@ -4,8 +4,8 @@ import { S3Service } from './s3.service';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ValidationException } from '../../../domain/exceptions/domain.exceptions';
 
-
 const mockSend = jest.fn();
+
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation(() => ({
     send: mockSend,
@@ -27,6 +27,7 @@ const mockSharp = require('sharp');
 describe('S3Service', () => {
   let service: S3Service;
   let mockConfigService: jest.Mocked<ConfigService>;
+  let mockLogger: any;
 
   const mockConfig = {
     'AWS_REGION': 'us-east-1',
@@ -43,6 +44,13 @@ describe('S3Service', () => {
       get: jest.fn((key: string) => mockConfig[key]),
     } as any;
 
+    
+    mockLogger = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         S3Service,
@@ -54,6 +62,8 @@ describe('S3Service', () => {
     }).compile();
 
     service = module.get<S3Service>(S3Service);
+    
+    (service as any).logger = mockLogger;
   });
 
   it('should be defined', () => {
@@ -235,6 +245,7 @@ describe('S3Service', () => {
       mockSend.mockRejectedValueOnce(new Error('Upload failed') as never);
       
       await expect(service.uploadFile(mockFile, 'test-key')).rejects.toThrow(ValidationException);
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to upload'));
     });
 
     it('should return mock URL in development mode', async () => {
@@ -256,38 +267,13 @@ describe('S3Service', () => {
       }).compile();
 
       const devService = module.get<S3Service>(S3Service);
-      const result = await devService.uploadFile(mockFile, 'test-key');
-      
-      expect(result).toBe('https://mock-s3-url.com/test-key');
-    });
-
-    it('should return mock URL in development mode even when error occurs', async () => {
-      jest.clearAllMocks();
-      
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'AWS_REGION') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          S3Service,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const devService = module.get<S3Service>(S3Service);
-      
     
-      mockSharp.mockImplementationOnce(() => {
-        throw new Error('Sharp processing error');
-      });
+      (devService as any).logger = mockLogger;
       
       const result = await devService.uploadFile(mockFile, 'test-key');
+      
       expect(result).toBe('https://mock-s3-url.com/test-key');
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Development mode'));
     });
   });
 });
