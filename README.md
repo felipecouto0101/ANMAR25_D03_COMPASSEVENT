@@ -1,60 +1,103 @@
 # Compass Event
 
-A event management system built with NestJS, AWS DynamoDB, and AWS S3.
+## WHAT IS THE PROJECT
+Compass Event is an event management system that allows users to create, manage, and register for events. It provides authentication, event management, registration capabilities, and email notifications.
 
-## Infrastructure
+## LIBRARIES USED
+- **NestJS**: Backend framework
+- **AWS SDK**: For DynamoDB, S3, and SES integration
+- **Jest**: Testing framework
+- **AWS CDK**: Infrastructure as code
+- **JWT**: Authentication
+- **Sharp**: Image processing
+- **Multer**: File uploads
+- **Class Validator**: DTO validation
+- **AWS SES**: Email sending
+- **ical-generator**: Calendar invitation generation
 
-This project uses AWS CDK to define and provision infrastructure:
+## INSTALLATION INSTRUCTIONS
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-username/ANMAR25_D03_COMPASSEVENT.git
+   cd ANMAR25_D03_COMPASSEVENT
+   ```
 
-### DynamoDB Tables
-- **Events**: Stores event information
-- **Users**: Stores user accounts
-- **Registrations**: Stores event registrations
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-### S3 Bucket
-- **compass-event-images**: Stores event images
+3. Set up environment variables (see example below)
 
-## Setup
+4. Run the application:
+   ```bash
+   npm run start:dev
+   ```
 
-### Prerequisites
-- Node.js 16+
-- AWS CLI configured
-- AWS CDK installed (`npm install -g aws-cdk`)
+## ROUTES AND ROUTE RULES
 
-### Environment Variables
-Copy the example environment file:
+### Authentication Routes
+
+- **POST /auth/login**: Login with credentials
+  - Body: `{ email, password }`
+  - Returns: JWT token
+
+### User Routes
+- **POST /users**: Register a new user
+  - Body: `{ name, email, password, role, phone }`
+  - Rules: Email must be unique, password must be strong
+
+- **GET /users**: Search all users
+  - Rules: Requires authentication
+
+- **GET /users/{id}**: Get current user profile
+  - Rules: Requires authentication
+
+- **GET /users/verify-email**: Verify user email
+  - Query params: `{ token }`
+  - Rules: Token must be valid and not expired
+
+- **PATCH /users/{id}**: Update current user profile
+  - Body: `{ name, email, password, role, phone }`
+  - Rules: Requires authentication
+
+- **DELETE /users/{id}**: Delete current user account
+  - Rules: Requires authentication
+
+
+### Event Routes
+- **GET /events**: Get all events
+  - Query params: `{ name, startDate, endDate, active, page, limit }`
+  - Public route
+
+- **GET /events/:id**: Get event by ID
+  - Public route
+
+- **POST /events**: Create a new event
+  - Body: `{ name, description, date, location }` + image file
+  - Rules: Requires organizer or admin role
+  - Note: Creator is automatically registered for the event
+
+- **PATCH /events/:id**: Update an event
+  - Body: `{ name, description, date, location }` + optional image file
+  - Rules: Only the creator or admin can update
+
+- **DELETE /events/:id**: Delete an event (soft delete)
+  - Rules: Only the creator or admin can delete
+
+### Registration Routes
+- **GET /registrations**: Get user registrations
+  - Query params: `{ page, limit }`
+  - Rules: Users can see only their own registrations, organizers can see registrations for their events
+
+- **POST /registrations**: Register for an event
+  - Body: `{ eventId }`
+  - Rules: Event must be active and in the future, user can't register twice
+
+- **DELETE /registrations/:id**: Cancel registration
+  - Rules: Users can cancel only their own registrations
+
 ```
-cp .env.example .env
-```
 
-Update the values in `.env` with your configuration.
 
-### Deploy Infrastructure
-```
-cd infra
-npm install
-cdk deploy CompassEventDynamoDBStack CompassEventS3Stack
-```
-
-### Run Application
-```
-npm install
-npm run start:dev
-```
-
-## Architecture
-
-This project follows Clean Architecture principles:
-
-- **Domain**: Core business logic and entities
-- **Application**: Use cases and application services
-- **Infrastructure**: External services and adapters
-- **Interfaces**: Controllers and DTOs
-
-## Testing
-
-```
-npm run test
-npm run test:e2e
-npm run test:cov
-```
+**IMPORTANT**: The database should not be reloaded. The application uses AWS DynamoDB which persists data between application restarts.
