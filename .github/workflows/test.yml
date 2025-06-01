@@ -30,9 +30,27 @@ jobs:
       env:
         NODE_ENV: test
         JWT_SECRET: test-jwt-secret-for-ci
+        EMAIL_VERIFICATION_SECRET: test-email-verification-secret
+        AWS_REGION: us-east-1
+        EMAIL_FROM: test@example.com
+        EMAIL_VERIFICATION_EXPIRY: 24h
+        AWS_ACCESS_KEY_ID: fake-access-key-for-tests
+        AWS_SECRET_ACCESS_KEY: fake-secret-key-for-tests
+        DYNAMODB_TABLE: test-table
+        DYNAMODB_ENDPOINT: http://localhost:8000
 
     - name: Run test coverage
       run: npm run test:cov
+      env:
+        NODE_ENV: test
+        JWT_SECRET: test-jwt-secret-for-ci
+        EMAIL_VERIFICATION_SECRET: test-email-verification-secret
+        AWS_REGION: us-east-1
+        EMAIL_FROM: test@example.com
+        AWS_ACCESS_KEY_ID: fake-access-key-for-tests
+        AWS_SECRET_ACCESS_KEY: fake-secret-key-for-tests
+        DYNAMODB_TABLE: test-table
+        DYNAMODB_ENDPOINT: http://localhost:8000
 
     - name: Check test coverage
       run: |
