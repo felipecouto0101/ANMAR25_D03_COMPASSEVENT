@@ -35,9 +35,11 @@ jobs:
     - name: Run test coverage
       run: npm run test:cov
 
-    - name: Debug coverage directory
-      run: ls -la coverage/
-
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage/
 
     - name: Check test coverage
       run: |
