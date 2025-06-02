@@ -53,6 +53,40 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'Email already exists' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('profileImage'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          example: 'John Doe' 
+        },
+        email: { 
+          type: 'string', 
+          example: 'john.doe@example.com' 
+        },
+        password: { 
+          type: 'string', 
+          example: 'StrongPassword123!' 
+        },
+        role: { 
+          type: 'string', 
+          example: 'participant',
+          enum: ['admin', 'organizer', 'participant']
+        },
+        phone: { 
+          type: 'string', 
+          example: '+1234567890' 
+        },
+        profileImage: {
+          type: 'string',
+          format: 'binary',
+          description: 'User profile image file'
+        }
+      },
+      required: ['name', 'email', 'password', 'role', 'profileImage']
+    }
+  })
   async create(
     @Body() createUserDto: CreateUserDto,
     @UploadedFile(

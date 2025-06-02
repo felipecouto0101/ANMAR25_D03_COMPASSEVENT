@@ -44,8 +44,9 @@ Compass Event is an event management system that allows users to create, manage,
 
 ### User Routes
 - **POST /users**: Register a new user
-  - Body: `{ name, email, password, role, phone }`
-  - Rules: Email must be unique, password must be strong
+  - Body: `{ name, email, password, role, phone }` + profile image file
+  - Rules: Email must be unique, password must be strong, profile image is required
+  - Note: Image will be processed and stored in S3
 
 - **GET /users**: Search all users
   - Rules: Requires authentication
@@ -58,7 +59,7 @@ Compass Event is an event management system that allows users to create, manage,
   - Rules: Token must be valid and not expired
 
 - **PATCH /users/{id}**: Update current user profile
-  - Body: `{ name, email, password, role, phone }`
+  - Body: `{ name, email, password, role, phone }` + optional profile image file
   - Rules: Requires authentication
 
 - **DELETE /users/{id}**: Delete current user account
@@ -87,8 +88,9 @@ Compass Event is an event management system that allows users to create, manage,
 
 ### Registration Routes
 - **GET /registrations**: Get user registrations
-  - Query params: `{ page, limit }`
+  - Query params: `{ page, limit, userId }`
   - Rules: Users can see only their own registrations, organizers can see registrations for their events
+
 
 - **POST /registrations**: Register for an event
   - Body: `{ eventId }`
