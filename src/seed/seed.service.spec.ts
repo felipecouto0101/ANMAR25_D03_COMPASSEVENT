@@ -4,6 +4,37 @@ import { SeedService } from './seed.service';
 import { UsersService } from '../modules/users/users.service';
 import { Logger } from '@nestjs/common';
 
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(),
+  PutObjectCommand: jest.fn()
+}));
+
+jest.mock('@aws-sdk/client-ses', () => ({
+  SESClient: jest.fn(),
+  SendEmailCommand: jest.fn(),
+  ListVerifiedEmailAddressesCommand: jest.fn()
+}));
+
+jest.mock('fs');
+jest.mock('path');
+jest.mock('sharp', () => ({
+  default: jest.fn().mockReturnValue({
+    resize: jest.fn().mockReturnThis(),
+    toBuffer: jest.fn().mockResolvedValue(Buffer.from('test'))
+  })
+}));
+jest.mock('ical-generator', () => ({
+  default: jest.fn().mockReturnValue({
+    createEvent: jest.fn().mockReturnThis(),
+    toString: jest.fn().mockReturnValue('test-ical')
+  })
+}));
+jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn().mockReturnValue('test-token'),
+  verify: jest.fn().mockReturnValue({ userId: 'test-id', email: 'test@example.com' })
+}));
+
 describe('SeedService', () => {
   let service: SeedService;
   let configService: ConfigService;
@@ -36,6 +67,12 @@ describe('SeedService', () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    
+    
+    jest.requireMock('path').join.mockReturnValue('/mock/path/default-profile.jpg');
+    
+ 
+    jest.requireMock('fs').readFileSync.mockReturnValue(Buffer.from('test-image-data'));
   });
 
   it('should be defined', () => {
@@ -129,13 +166,20 @@ describe('SeedService', () => {
       await (service as any).seedDefaultAdmin();
       
       expect(usersService.findAll).toHaveBeenCalled();
-      expect(usersService.create).toHaveBeenCalledWith({
-        name: 'Admin User',
-        email: 'admin@example.com',
-        password: 'password123',
-        phone: '+1234567890',
-        role: 'admin',
-      });
+      expect(usersService.create).toHaveBeenCalledWith(
+        {
+          name: 'Admin User',
+          email: 'admin@example.com',
+          password: 'password123',
+          phone: '+1234567890',
+          role: 'admin',
+        },
+        expect.objectContaining({
+          fieldname: 'profileImage',
+          originalname: 'default-profile.jpg',
+          buffer: expect.any(Buffer)
+        })
+      );
       expect(Logger.prototype.log).toHaveBeenCalled();
     });
 
@@ -162,6 +206,39 @@ describe('SeedService', () => {
       expect(usersService.findAll).toHaveBeenCalled();
       expect(usersService.create).toHaveBeenCalled();
       expect(Logger.prototype.error).toHaveBeenCalledWith(`Failed to seed default admin user: ${error.message}`);
+    });
+    
+    it('should use fallback image when file read fails', async () => {
+      jest.spyOn(configService, 'get').mockImplementation((key) => {
+        const values = {
+          DEFAULT_ADMIN_EMAIL: 'admin@example.com',
+          DEFAULT_ADMIN_NAME: 'Admin User',
+          DEFAULT_ADMIN_PASSWORD: 'password123',
+        };
+        return values[key];
+      });
+      
+      jest.spyOn(usersService, 'findAll').mockResolvedValue({
+        items: [],
+        total: 0,
+      });
+      
+      
+      jest.requireMock('fs').readFileSync.mockImplementation(() => {
+        throw new Error('File not found');
+      });
+      
+      await (service as any).seedDefaultAdmin();
+      
+      expect(usersService.create).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          fieldname: 'profileImage',
+          originalname: 'default-profile.jpg',
+          buffer: expect.any(Buffer)
+        })
+      );
+      expect(Logger.prototype.warn).toHaveBeenCalledWith('Default profile image not found, using placeholder');
     });
   });
 });
