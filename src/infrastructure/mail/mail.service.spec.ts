@@ -6,8 +6,16 @@ import { Event } from '../../domain/entities/event.entity';
 import { SESClient, SendEmailCommand, ListVerifiedEmailAddressesCommand } from '@aws-sdk/client-ses';
 
 
-const mockSend = jest.fn();
+jest.mock('ical-generator', () => {
+  return {
+    default: jest.fn().mockImplementation(() => ({
+      createEvent: jest.fn().mockReturnThis(),
+      toString: jest.fn().mockReturnValue('test-ical')
+    }))
+  };
+});
 
+const mockSend = jest.fn();
 
 class MockSESClient {
   send = mockSend;
@@ -484,53 +492,37 @@ describe('MailService', () => {
   });
 
   describe('email sending methods', () => {
+    beforeEach(() => {
+      
+      mockSend.mockResolvedValue({});
+    });
+
     it('should send account deleted email', async () => {
-      
-      mockSend.mockResolvedValueOnce({});
-      
       const result = await service.sendAccountDeletedEmail(testUser);
       expect(result).toBe(true);
     });
 
     it('should send event created email', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
       const result = await service.sendEventCreatedEmail(testEvent, testUser);
       expect(result).toBe(true);
     });
 
     it('should send event deleted email', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
       const result = await service.sendEventDeletedEmail(testEvent, testUser);
       expect(result).toBe(true);
     });
 
     it('should send registration confirmation email', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
       const result = await service.sendRegistrationConfirmationEmail(testEvent, testUser);
       expect(result).toBe(true);
     });
 
     it('should send registration cancelled email', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
       const result = await service.sendRegistrationCancelledEmail(testEvent, testUser);
       expect(result).toBe(true);
     });
 
     it('should send new event notification to participants', async () => {
-      
-      mockSend.mockResolvedValueOnce({});
-      
-     
-      mockSend.mockResolvedValueOnce({});
-      
       const participants = [testUser, {...testUser, id: 'user-id-2', email: 'user2@example.com'}];
       const result = await service.sendNewEventNotificationToParticipants(testEvent, participants);
       expect(result).toBe(2);
@@ -539,8 +531,6 @@ describe('MailService', () => {
     it('should handle failed email in notification batch', async () => {
       
       mockSend.mockResolvedValueOnce({});
-      
-      
       mockSend.mockRejectedValueOnce(new Error('Failed to send email'));
       
       const participants = [testUser, {...testUser, id: 'user-id-2', email: 'user2@example.com'}];

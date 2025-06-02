@@ -43,13 +43,16 @@ export class UsersService {
       throw new ConflictException(`User with email ${createUserDto.email} already exists`);
     }
 
-    const now = new Date().toISOString();
-    let profileImageUrl: string | undefined;
-
-    if (profileImage) {
-      const fileKey = `users/${uuidv4()}-${profileImage.originalname}`;
-      profileImageUrl = await this.s3Service.uploadFile(profileImage, fileKey);
+    if (!profileImage || !profileImage.buffer) {
+      throw new ValidationException('Profile image is required', {
+        profileImage: 'A valid profile image file is required'
+      });
     }
+
+    const now = new Date().toISOString();
+    
+    const fileKey = `users/${uuidv4()}-${profileImage.originalname}`;
+    const profileImageUrl = await this.s3Service.uploadFile(profileImage, fileKey);
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     

@@ -10,6 +10,37 @@ import {
   ConflictException 
 } from '../../domain/exceptions/domain.exceptions';
 
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(),
+  PutObjectCommand: jest.fn()
+}));
+
+jest.mock('@aws-sdk/client-ses', () => ({
+  SESClient: jest.fn(),
+  SendEmailCommand: jest.fn(),
+  ListVerifiedEmailAddressesCommand: jest.fn()
+}));
+
+jest.mock('sharp', () => ({
+  default: jest.fn().mockReturnValue({
+    resize: jest.fn().mockReturnThis(),
+    toBuffer: jest.fn().mockResolvedValue(Buffer.from('test'))
+  })
+}));
+
+jest.mock('ical-generator', () => ({
+  default: jest.fn().mockReturnValue({
+    createEvent: jest.fn().mockReturnThis(),
+    toString: jest.fn().mockReturnValue('test-ical')
+  })
+}));
+
+jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn().mockReturnValue('test-token'),
+  verify: jest.fn().mockReturnValue({ userId: 'test-id', email: 'test@example.com' })
+}));
+
 describe('UsersService', () => {
   let service: UsersService;
   let userRepository: any;
@@ -118,7 +149,7 @@ describe('UsersService', () => {
       expect(result.email).toBe('test@example.com');
     });
 
-    it('should create a user without profile image', async () => {
+    it('should throw ValidationException when profile image is missing', async () => {
       const createUserDto: CreateUserDto = {
         name: 'Test User',
         email: 'test@example.com',
@@ -127,11 +158,9 @@ describe('UsersService', () => {
         role: 'participant',
       };
 
-      const result = await service.create(createUserDto);
-
-      expect(s3Service.uploadFile).not.toHaveBeenCalled();
-      expect(userRepository.create).toHaveBeenCalled();
-      expect(result).toBeDefined();
+      await expect(
+        service.create(createUserDto)
+      ).rejects.toThrow(ValidationException);
     });
 
     it('should throw ConflictException when email already exists', async () => {

@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../modules/users/users.service';
 import { CreateUserDto } from '../modules/users/dto/create-user.dto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class SeedService {
@@ -46,7 +48,28 @@ export class SeedService {
         role: 'admin',
       };
 
-      const createdAdmin = await this.usersService.create(defaultAdmin);
+     
+      const defaultImagePath = path.join(__dirname, '..', '..', 'assets', 'default-profile.jpg');
+      let profileImageBuffer: Buffer;
+      
+      try {
+        profileImageBuffer = fs.readFileSync(defaultImagePath);
+      } catch (error) {
+        
+        profileImageBuffer = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+        this.logger.warn('Default profile image not found, using placeholder');
+      }
+
+      const profileImage = {
+        fieldname: 'profileImage',
+        originalname: 'default-profile.jpg',
+        encoding: '7bit',
+        mimetype: 'image/jpeg',
+        size: profileImageBuffer.length,
+        buffer: profileImageBuffer
+      };
+
+      const createdAdmin = await this.usersService.create(defaultAdmin, profileImage);
       this.logger.log(`Default admin user created: ${createdAdmin.email}`);
     } catch (error) {
       this.logger.error(`Failed to seed default admin user: ${error.message}`);
