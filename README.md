@@ -23,35 +23,6 @@ Compass Event is an event management system that allows users to create, manage,
 
 The application includes an email service that can send emails with iCalendar attachments for event management. This allows users to easily add events to their calendar applications.
 
-### Architecture
-
-The email service follows Clean Architecture principles with separation of concerns:
-
-- **EmailSender**: Handles the actual sending of emails (AWS SES implementation)
-- **CalendarService**: Generates iCalendar attachments for events
-- **TokenService**: Manages email verification tokens
-- **EmailTemplate**: Creates HTML email templates
-- **NotificationService**: Orchestrates the above services to send various types of notifications
-
-### Features
-- Email verification for new users
-- Event creation confirmation with calendar attachment
-- Registration confirmation with calendar attachment
-- Event notifications with calendar attachment
-- Account deletion notifications
-
-## IMAGE PROCESSING WITH AWS LAMBDA
-
-The application uses AWS Lambda for processing user profile images:
-
-1. When a user uploads a profile image, it's stored in S3 with a `profiles/` prefix
-2. An S3 event trigger automatically invokes a Lambda function
-3. The Lambda function:
-   - Retrieves the image from S3
-   - Resizes it to 300x300 pixels using Sharp
-   - Uploads the processed image back to S3 with the same key
-
-This serverless approach ensures consistent image sizes without burdening the main application server.
 
 ## INSTALLATION INSTRUCTIONS
 1. Clone the repository:
