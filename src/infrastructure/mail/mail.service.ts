@@ -5,7 +5,9 @@ import { NotificationService } from './notification.service';
 import { TokenService } from './interfaces/token-service.interface';
 import { TOKEN_SERVICE } from './constants/injection-tokens';
 
-
+/**
+ * @deprecated 
+ */
 @Injectable()
 export class MailService {
   constructor(
