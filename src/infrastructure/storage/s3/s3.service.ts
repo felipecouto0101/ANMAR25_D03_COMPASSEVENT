@@ -65,22 +65,30 @@ export class S3Service {
         return `https://mock-s3-url.com/${key}`;
       }
       
-      const processedImageBuffer = await sharp(file.buffer)
-        .resize(300, 300, {
-          fit: 'cover',
-          position: 'center',
-        })
-        .toBuffer();
+      const isProfileImage = key.startsWith('profiles/');
+      const imageBuffer = isProfileImage 
+        ? file.buffer 
+        : await sharp(file.buffer)
+            .resize(300, 300, {
+              fit: 'cover',
+              position: 'center',
+            })
+            .toBuffer();
 
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
-        Body: processedImageBuffer,
+        Body: imageBuffer,
         ContentType: file.mimetype
       });
 
       await this.s3Client.send(command);
       this.logger.log(`File uploaded successfully to S3: ${key}`);
+      
+      if (isProfileImage) {
+        this.logger.log('Profile image uploaded. Lambda will process it.');
+      }
+      
       return `https://${this.bucketName}.s3.amazonaws.com/${key}`;
     } catch (error) {
       this.logger.error(`Failed to upload file to S3: ${error.message}`);
