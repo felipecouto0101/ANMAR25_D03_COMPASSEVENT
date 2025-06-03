@@ -4,16 +4,25 @@
 Compass Event is an event management system that allows users to create, manage, and register for events. It provides authentication, event management, registration capabilities, and email notifications.
 
 ## LIBRARIES USED
-- **NestJS**: Backend framework
-- **AWS SDK**: For DynamoDB, S3, and SES integration
-- **Jest**: Testing framework
-- **AWS CDK**: Infrastructure as code
-- **JWT**: Authentication
-- **Sharp**: Image processing
-- **Multer**: File uploads
-- **Class Validator**: DTO validation
-- **AWS SES**: Email sending
-- **ical-generator**: Calendar invitation generation
+- **NestJS**: ^10.0.0 - Backend framework
+- **AWS SDK**: 
+  - **@aws-sdk/client-dynamodb**: ^3.427.0
+  - **@aws-sdk/client-s3**: ^3.427.0
+  - **@aws-sdk/client-ses**: ^3.427.0
+  - **@aws-sdk/lib-dynamodb**: ^3.427.0
+- **Jest**: ^29.5.0 - Testing framework
+- **AWS CDK**: ^2.102.0 - Infrastructure as code
+- **jsonwebtoken**: ^9.0.2 - Authentication
+- **Sharp**: ^0.32.6 - Image processing
+- **Multer**: ^1.4.5-lts.1 - File uploads
+- **Class Validator**: ^0.14.0 - DTO validation
+- **ical-generator**: ^5.0.1 - Calendar invitation generation
+- **AWS Lambda**: - Serverless function for image processing
+
+## EMAIL SERVICE WITH ICALENDAR SUPPORT
+
+The application includes an email service that can send emails with iCalendar attachments for event management. This allows users to easily add events to their calendar applications.
+
 
 ## INSTALLATION INSTRUCTIONS
 1. Clone the repository:
@@ -29,7 +38,12 @@ Compass Event is an event management system that allows users to create, manage,
 
 3. Set up environment variables (see example below)
 
-4. Run the application:
+4. Deploy AWS infrastructure:
+   ```bash
+   npm run cdk:deploy
+   ```
+
+5. Run the application:
    ```bash
    npm run start:dev
    ```
@@ -46,7 +60,7 @@ Compass Event is an event management system that allows users to create, manage,
 - **POST /users**: Register a new user
   - Body: `{ name, email, password, role, phone }` + profile image file
   - Rules: Email must be unique, password must be strong, profile image is required
-  - Note: Image will be processed and stored in S3
+  - Note: Image will be processed by AWS Lambda to 300x300px
 
 - **GET /users**: Search all users
   - Rules: Requires authentication
@@ -98,8 +112,5 @@ Compass Event is an event management system that allows users to create, manage,
 
 - **DELETE /registrations/:id**: Cancel registration
   - Rules: Users can cancel only their own registrations
-
-```
-
 
 **IMPORTANT**: The database should not be reloaded. The application uses AWS DynamoDB which persists data between application restarts.

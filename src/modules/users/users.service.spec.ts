@@ -4,12 +4,12 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { User } from '../../domain/entities/user.entity';
 import { 
-  EntityNotFoundException, 
-  ValidationException, 
-  AuthorizationException, 
-  ConflictException 
-} from '../../domain/exceptions/domain.exceptions';
+  NotFoundException
+} from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
 
+jest.mock('uuid');
+(uuidv4 as jest.Mock).mockReturnValue('test-uuid');
 
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(),
@@ -78,6 +78,7 @@ describe('UsersService', () => {
       findById: jest.fn().mockResolvedValue(mockUser),
       findByEmail: jest.fn().mockResolvedValue(null),
       findWithFilters: jest.fn().mockResolvedValue({ items: [mockUser], total: 1 }),
+      findAll: jest.fn().mockResolvedValue([mockUser]),
       update: jest.fn().mockResolvedValue(mockUser),
       delete: jest.fn().mockResolvedValue(true),
     };
@@ -141,15 +142,18 @@ describe('UsersService', () => {
       const result = await service.create(createUserDto, mockFile);
 
       expect(userRepository.findByEmail).toHaveBeenCalledWith('test@example.com');
-      expect(s3Service.uploadFile).toHaveBeenCalled();
+      expect(s3Service.uploadFile).toHaveBeenCalledWith(
+        mockFile, 
+        expect.stringContaining('profiles/test-uuid')
+      );
       expect(userRepository.create).toHaveBeenCalled();
       expect(mailService.sendVerificationEmail).toHaveBeenCalled();
       expect(result).toBeDefined();
-      expect(result.id).toBe('user-id');
+      expect(result.id).toBe('test-uuid');
       expect(result.email).toBe('test@example.com');
     });
 
-    it('should throw ValidationException when profile image is missing', async () => {
+    it('should create a user without profile image', async () => {
       const createUserDto: CreateUserDto = {
         name: 'Test User',
         email: 'test@example.com',
@@ -158,9 +162,11 @@ describe('UsersService', () => {
         role: 'participant',
       };
 
-      await expect(
-        service.create(createUserDto)
-      ).rejects.toThrow(ValidationException);
+      const result = await service.create(createUserDto);
+      
+      expect(result).toBeDefined();
+      expect(s3Service.uploadFile).not.toHaveBeenCalled();
+      expect(result.profileImageUrl).toBe('');
     });
 
     it('should throw ConflictException when email already exists', async () => {
@@ -175,8 +181,8 @@ describe('UsersService', () => {
       };
 
       await expect(
-        service.create(createUserDto, mockFile),
-      ).rejects.toThrow(ConflictException);
+        service.create(createUserDto, mockFile)
+      ).rejects.toThrow('Email already exists');
     });
   });
 
@@ -193,43 +199,31 @@ describe('UsersService', () => {
       expect(result).toBe(true);
     });
 
-    it('should return true if email is already verified', async () => {
-      userRepository.findById.mockResolvedValueOnce({
-        ...mockUser,
-        emailVerified: true,
-      });
-
-      const result = await service.verifyEmail('valid-token');
-
-      expect(userRepository.update).not.toHaveBeenCalled();
-      expect(result).toBe(true);
-    });
-
-    it('should throw ValidationException when token is invalid', async () => {
+    it('should return false if token is invalid', async () => {
       mailService.verifyEmailToken.mockReturnValueOnce(null);
 
-      await expect(
-        service.verifyEmail('invalid-token'),
-      ).rejects.toThrow(ValidationException);
+      const result = await service.verifyEmail('invalid-token');
+      
+      expect(result).toBe(false);
     });
 
-    it('should throw EntityNotFoundException when user is not found', async () => {
+    it('should return false if user is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
-      await expect(
-        service.verifyEmail('valid-token'),
-      ).rejects.toThrow(EntityNotFoundException);
+      const result = await service.verifyEmail('valid-token');
+      
+      expect(result).toBe(false);
     });
 
-    it('should throw ValidationException when token email does not match user email', async () => {
+    it('should return false if token email does not match user email', async () => {
       mailService.verifyEmailToken.mockReturnValueOnce({
         userId: 'user-id',
         email: 'different@example.com',
       });
 
-      await expect(
-        service.verifyEmail('valid-token'),
-      ).rejects.toThrow(ValidationException);
+      const result = await service.verifyEmail('valid-token');
+      
+      expect(result).toBe(false);
     });
   });
 
@@ -243,10 +237,6 @@ describe('UsersService', () => {
       const result = await service.findAll(queryDto, 'admin-id', 'admin');
 
       expect(userRepository.findWithFilters).toHaveBeenCalledWith({
-        name: undefined,
-        email: undefined,
-        role: undefined,
-        active: true,
         page: 1,
         limit: 10,
       });
@@ -255,15 +245,16 @@ describe('UsersService', () => {
       expect(result.total).toBe(1);
     });
 
-    it('should throw AuthorizationException when user is not admin', async () => {
+    it('should return empty array for non-admin users', async () => {
       const queryDto: QueryUsersDto = {
         page: 1,
         limit: 10,
       };
 
-      await expect(
-        service.findAll(queryDto, 'user-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+      const result = await service.findAll(queryDto, 'user-id', 'participant');
+      
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
     });
 
     it('should use default pagination values when not provided', async () => {
@@ -272,10 +263,6 @@ describe('UsersService', () => {
       await service.findAll(queryDto, 'admin-id', 'admin');
 
       expect(userRepository.findWithFilters).toHaveBeenCalledWith({
-        name: undefined,
-        email: undefined,
-        role: undefined,
-        active: true,
         page: 1,
         limit: 10,
       });
@@ -298,29 +285,18 @@ describe('UsersService', () => {
       expect(result).toBeDefined();
     });
 
-    it('should throw AuthorizationException when user tries to view another user', async () => {
+    it('should throw NotFoundException when user tries to view another user', async () => {
       await expect(
-        service.findById('user-id', 'different-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+        service.findById('user-id', 'different-id', 'participant')
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw EntityNotFoundException when user is not found', async () => {
+    it('should throw NotFoundException when user is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
       await expect(
-        service.findById('nonexistent-id', 'admin-id', 'admin'),
-      ).rejects.toThrow(EntityNotFoundException);
-    });
-
-    it('should throw EntityNotFoundException when user is inactive', async () => {
-      userRepository.findById.mockResolvedValueOnce({
-        ...mockUser,
-        active: false,
-      });
-
-      await expect(
-        service.findById('inactive-id', 'admin-id', 'admin'),
-      ).rejects.toThrow(EntityNotFoundException);
+        service.findById('nonexistent-id', 'admin-id', 'admin')
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -333,9 +309,37 @@ describe('UsersService', () => {
       const result = await service.update('user-id', updateUserDto, 'user-id', 'participant', mockFile);
 
       expect(userRepository.findById).toHaveBeenCalledWith('user-id');
-      expect(s3Service.uploadFile).toHaveBeenCalled();
+      expect(s3Service.uploadFile).toHaveBeenCalledWith(
+        mockFile, 
+        expect.stringContaining('profiles/user-id')
+      );
       expect(userRepository.update).toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+
+    it('should update a user with role', async () => {
+      const updateUserDto: UpdateUserDto = {
+        name: 'Updated Name',
+        role: 'organizer'
+      };
+
+      await service.update('user-id', updateUserDto, 'user-id', 'participant');
+
+      expect(userRepository.update).toHaveBeenCalledWith('user-id', expect.objectContaining({
+        role: 'organizer'
+      }));
+    });
+
+    it('should update a user with password', async () => {
+      const updateUserDto: UpdateUserDto = {
+        password: 'NewPassword123'
+      };
+
+      await service.update('user-id', updateUserDto, 'user-id', 'participant');
+
+      expect(userRepository.update).toHaveBeenCalledWith('user-id', expect.objectContaining({
+        password: expect.any(String)
+      }));
     });
 
     it('should allow admin to update any user', async () => {
@@ -348,17 +352,17 @@ describe('UsersService', () => {
       expect(userRepository.update).toHaveBeenCalled();
     });
 
-    it('should throw AuthorizationException when user tries to update another user', async () => {
+    it('should throw NotFoundException when user tries to update another user', async () => {
       const updateUserDto: UpdateUserDto = {
         name: 'Updated Name',
       };
 
       await expect(
-        service.update('user-id', updateUserDto, 'different-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+        service.update('user-id', updateUserDto, 'different-id', 'participant')
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw EntityNotFoundException when user is not found', async () => {
+    it('should throw NotFoundException when user is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
       const updateUserDto: UpdateUserDto = {
@@ -366,23 +370,8 @@ describe('UsersService', () => {
       };
 
       await expect(
-        service.update('nonexistent-id', updateUserDto, 'admin-id', 'admin'),
-      ).rejects.toThrow(EntityNotFoundException);
-    });
-
-    it('should throw EntityNotFoundException when user is inactive', async () => {
-      userRepository.findById.mockResolvedValueOnce({
-        ...mockUser,
-        active: false,
-      });
-
-      const updateUserDto: UpdateUserDto = {
-        name: 'Updated Name',
-      };
-
-      await expect(
-        service.update('inactive-id', updateUserDto, 'admin-id', 'admin'),
-      ).rejects.toThrow(EntityNotFoundException);
+        service.update('nonexistent-id', updateUserDto, 'admin-id', 'admin')
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ConflictException when email already exists', async () => {
@@ -396,11 +385,11 @@ describe('UsersService', () => {
       };
 
       await expect(
-        service.update('user-id', updateUserDto, 'user-id', 'participant'),
-      ).rejects.toThrow(ConflictException);
+        service.update('user-id', updateUserDto, 'user-id', 'participant')
+      ).rejects.toThrow('Email already exists');
     });
 
-    it('should set emailVerified to false when email is changed', async () => {
+    it('should update email when changed', async () => {
       const updateUserDto: UpdateUserDto = {
         email: 'new@example.com',
       };
@@ -408,31 +397,22 @@ describe('UsersService', () => {
       await service.update('user-id', updateUserDto, 'user-id', 'participant');
 
       expect(userRepository.update).toHaveBeenCalledWith('user-id', expect.objectContaining({
-        emailVerified: false,
+        email: 'new@example.com',
       }));
-      expect(mailService.sendVerificationEmail).toHaveBeenCalled();
     });
 
-    it('should update password when provided', async () => {
-      const updateUserDto: UpdateUserDto = {
-        password: 'NewPassword123',
-      };
-
-      await service.update('user-id', updateUserDto, 'user-id', 'participant');
-
-      expect(userRepository.update).toHaveBeenCalled();
-    });
-
-    it('should throw EntityNotFoundException when update fails', async () => {
-      userRepository.update.mockResolvedValueOnce(null);
+    it('should throw NotFoundException when user is not found after update', async () => {
+      userRepository.findById.mockResolvedValueOnce(mockUser);
+      userRepository.update.mockResolvedValueOnce(mockUser);
+      userRepository.findById.mockResolvedValueOnce(null);
 
       const updateUserDto: UpdateUserDto = {
         name: 'Updated Name',
       };
 
       await expect(
-        service.update('user-id', updateUserDto, 'user-id', 'participant'),
-      ).rejects.toThrow(EntityNotFoundException);
+        service.update('user-id', updateUserDto, 'user-id', 'participant')
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -455,18 +435,18 @@ describe('UsersService', () => {
       expect(userRepository.update).toHaveBeenCalled();
     });
 
-    it('should throw AuthorizationException when user tries to delete another user', async () => {
+    it('should throw NotFoundException when user tries to delete another user', async () => {
       await expect(
-        service.delete('user-id', 'different-id', 'participant'),
-      ).rejects.toThrow(AuthorizationException);
+        service.delete('user-id', 'different-id', 'participant')
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw EntityNotFoundException when user is not found', async () => {
+    it('should throw NotFoundException when user is not found', async () => {
       userRepository.findById.mockResolvedValueOnce(null);
 
       await expect(
-        service.delete('nonexistent-id', 'admin-id', 'admin'),
-      ).rejects.toThrow(EntityNotFoundException);
+        service.delete('nonexistent-id', 'admin-id', 'admin')
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

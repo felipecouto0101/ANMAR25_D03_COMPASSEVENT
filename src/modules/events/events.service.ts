@@ -64,13 +64,14 @@ export class EventsService {
     }
 
     const now = new Date().toISOString();
+    const eventId = uuidv4();
     
-    const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
+    const fileKey = `events/${eventId}-${Date.now()}.jpg`;
     const imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
     
     const newEvent: Event = {
       ...createEventDto,
-      id: uuidv4(),
+      id: eventId,
       organizerId,
       imageUrl,
       active: true,
@@ -80,7 +81,6 @@ export class EventsService {
 
     const createdEvent = await this.eventRepository.create(newEvent);
     
-   
     await this.autoRegisterOrganizer(organizerId, createdEvent.id);
     
     await this.mailService.sendEventCreatedEmail(createdEvent, user);
@@ -159,7 +159,7 @@ export class EventsService {
     let imageUrl = event.imageUrl;
 
     if (imageFile) {
-      const fileKey = `events/${uuidv4()}-${imageFile.originalname}`;
+      const fileKey = `events/${id}-${Date.now()}.jpg`;
       imageUrl = await this.s3Service.uploadFile(imageFile, fileKey);
     }
 

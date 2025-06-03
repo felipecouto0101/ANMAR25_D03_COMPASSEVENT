@@ -1,46 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { MailService } from './mail.service';
-import { User } from '../../domain/entities/user.entity';
+import { NotificationService } from './notification.service';
 import { Event } from '../../domain/entities/event.entity';
-import { SESClient, SendEmailCommand, ListVerifiedEmailAddressesCommand } from '@aws-sdk/client-ses';
-
-
-jest.mock('ical-generator', () => {
-  return {
-    default: jest.fn().mockImplementation(() => ({
-      createEvent: jest.fn().mockReturnThis(),
-      toString: jest.fn().mockReturnValue('test-ical')
-    }))
-  };
-});
-
-const mockSend = jest.fn();
-
-class MockSESClient {
-  send = mockSend;
-}
-
-jest.mock('@aws-sdk/client-ses', () => ({
-  SESClient: jest.fn().mockImplementation(() => new MockSESClient()),
-  SendEmailCommand: jest.fn(),
-  ListVerifiedEmailAddressesCommand: jest.fn()
-}));
+import { User } from '../../domain/entities/user.entity';
+import { TOKEN_SERVICE } from './constants/injection-tokens';
 
 describe('MailService', () => {
   let service: MailService;
-  let mockConfigService: jest.Mocked<ConfigService>;
-
-  const mockConfig = {
-    'AWS_REGION': 'us-east-1',
-    'AWS_ACCESS_KEY_ID': 'test-key',
-    'AWS_SECRET_ACCESS_KEY': 'test-secret',
-    'AWS_SESSION_TOKEN': 'test-token',
-    'EMAIL_FROM': 'test@example.com',
-    'FRONTEND_URL': 'https://example.com',
-    'EMAIL_VERIFICATION_SECRET': 'test-secret',
-    'EMAIL_VERIFICATION_EXPIRY': '24h'
-  };
+  let mockNotificationService: jest.Mocked<NotificationService>;
+  let mockTokenService: any;
 
   const testUser: User = {
     id: 'user-id',
@@ -69,23 +37,28 @@ describe('MailService', () => {
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
     
-    mockConfigService = {
-      get: jest.fn((key: string) => mockConfig[key]),
-    } as any;
+    mockTokenService = {
+      generateToken: jest.fn().mockReturnValue('test-token'),
+      verifyToken: jest.fn().mockReturnValue({ userId: 'user-id', email: 'test@example.com' })
+    };
 
-    mockSend.mockResolvedValueOnce({
-      VerifiedEmailAddresses: ['test@example.com', 'user2@example.com']
-    });
+   
+    mockNotificationService = {
+      sendVerificationEmail: jest.fn().mockResolvedValue(true),
+      sendAccountDeletedEmail: jest.fn().mockResolvedValue(true),
+      sendEventCreatedEmail: jest.fn().mockResolvedValue(true),
+      sendEventDeletedEmail: jest.fn().mockResolvedValue(true),
+      sendRegistrationConfirmationEmail: jest.fn().mockResolvedValue(true),
+      sendRegistrationCancelledEmail: jest.fn().mockResolvedValue(true),
+      sendNewEventNotificationToParticipants: jest.fn().mockResolvedValue(2)
+    } as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MailService,
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
+        { provide: NotificationService, useValue: mockNotificationService },
+        { provide: TOKEN_SERVICE, useValue: mockTokenService }
       ],
     }).compile();
 
@@ -97,470 +70,101 @@ describe('MailService', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with all credentials', async () => {
-      jest.clearAllMocks();
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      expect(newService).toBeDefined();
-      
-     
-      const isEnabled = (newService as any).isEnabled;
-      expect(isEnabled).toBe(true);
-    });
-
-    it('should disable email service when credentials are missing', async () => {
-      jest.clearAllMocks();
-      
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'AWS_REGION') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const disabledService = module.get<MailService>(MailService);
-      expect(disabledService).toBeDefined();
-      
-     
-      const isEnabled = (disabledService as any).isEnabled;
-      expect(isEnabled).toBe(false);
-      
-      const result = await disabledService.sendVerificationEmail(testUser);
-      expect(result).toBe(false);
-    });
-
-    it('should disable email service when fromEmail is missing', async () => {
-      jest.clearAllMocks();
-      
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'EMAIL_FROM') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const disabledService = module.get<MailService>(MailService);
-      
-      
-      const isEnabled = (disabledService as any).isEnabled;
-      expect(isEnabled).toBe(false);
-    });
-  });
-
-  describe('loadVerifiedEmails', () => {
-    it('should load verified emails successfully', async () => {
-      jest.clearAllMocks();
-      
-     
-      mockSend.mockResolvedValueOnce({
-        VerifiedEmailAddresses: ['test@example.com', 'admin@example.com']
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      
-      
-      const verifiedEmails = (newService as any).verifiedEmails;
-      expect(verifiedEmails.size).toBeGreaterThan(0);
-      expect(verifiedEmails.has('test@example.com')).toBe(true);
-    });
-
-    it('should handle empty verified emails response', async () => {
-      jest.clearAllMocks();
-      
-      
-      mockSend.mockResolvedValueOnce({
-        VerifiedEmailAddresses: []
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      
-     
-      const verifiedEmails = (newService as any).verifiedEmails;
-      expect(verifiedEmails.size).toBe(0);
-    });
-
-    it('should handle errors when loading verified emails', async () => {
-      jest.clearAllMocks();
-      
-      mockSend.mockRejectedValueOnce(new Error('Failed to load emails'));
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      expect(newService).toBeDefined();
-      
-      
-      const verifiedEmails = (newService as any).verifiedEmails;
-      expect(verifiedEmails).toBeDefined();
-    });
-
-    it('should skip loading verified emails when service is disabled', async () => {
-      jest.clearAllMocks();
-      
-      const disabledConfigService = {
-        get: jest.fn((key: string) => {
-          if (key === 'AWS_REGION') return undefined;
-          return mockConfig[key];
-        }),
-      } as any;
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: disabledConfigService,
-          },
-        ],
-      }).compile();
-
-      module.get<MailService>(MailService);
-      
-      expect(mockSend).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('isEmailVerified', () => {
-    it('should return true for verified email', async () => {
-      jest.clearAllMocks();
-      
-      
-      mockSend.mockResolvedValueOnce({
-        VerifiedEmailAddresses: ['test@example.com', 'admin@example.com']
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      
-      
-      const isVerified = (newService as any).isEmailVerified('test@example.com');
-      expect(isVerified).toBe(true);
-    });
-
-    it('should return false for unverified email', async () => {
-      jest.clearAllMocks();
-      
-      
-      mockSend.mockResolvedValueOnce({
-        VerifiedEmailAddresses: ['test@example.com', 'admin@example.com']
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      
-      
-      const isVerified = (newService as any).isEmailVerified('unverified@example.com');
-      expect(isVerified).toBe(false);
-    });
-  });
-
-  describe('sendEmail', () => {
-    it('should skip sending when service is disabled', async () => {
-      jest.clearAllMocks();
-      
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'AWS_REGION') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const disabledService = module.get<MailService>(MailService);
-      
-      
-      const result = await (disabledService as any).sendEmail('test@example.com', 'Subject', 'Content');
-      expect(result).toBe(false);
-    });
-
-    it('should skip sending when email is not verified', async () => {
-      jest.clearAllMocks();
-      
-      
-      mockSend.mockResolvedValueOnce({
-        VerifiedEmailAddresses: ['verified@example.com']
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const newService = module.get<MailService>(MailService);
-      
-      
-      const result = await (newService as any).sendEmail('unverified@example.com', 'Subject', 'Content');
-      expect(result).toBe(false);
-    });
-
-    it('should handle errors when sending email', async () => {
-     
-      mockSend.mockRejectedValueOnce(new Error('Failed to send email'));
-      
-      
-      const result = await (service as any).sendEmail('test@example.com', 'Subject', 'Content');
-      expect(result).toBe(false);
-    });
-
-    it('should handle attachments in email', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
-      
-      const result = await (service as any).sendEmail(
-        'test@example.com', 
-        'Subject', 
-        'Content', 
-        [{filename: 'test.ics', content: 'test content'}]
-      );
-      expect(result).toBe(true);
-    });
-
-    it('should send email successfully', async () => {
-     
-      mockSend.mockResolvedValueOnce({});
-      
-      
-      const result = await (service as any).sendEmail('test@example.com', 'Subject', 'Content');
-      expect(result).toBe(true);
+    it('should inject dependencies correctly', () => {
+      expect(service['notificationService']).toBe(mockNotificationService);
+      expect(service['tokenService']).toBe(mockTokenService);
     });
   });
 
   describe('generateVerificationToken', () => {
-    it('should generate a token with configured secret', () => {
+    it('should generate a token', () => {
       const token = service.generateVerificationToken('user-id', 'test@example.com');
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
-    });
-
-    it('should generate a token with default secret when not configured', async () => {
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'EMAIL_VERIFICATION_SECRET') return undefined;
-        return mockConfig[key];
-      });
       
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-      
-      const newService = module.get<MailService>(MailService);
-      const token = newService.generateVerificationToken('user-id', 'test@example.com');
-      
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('string');
+      expect(mockTokenService.generateToken).toHaveBeenCalledWith('user-id', 'test@example.com');
+      expect(token).toBe('test-token');
     });
   });
 
   describe('verifyEmailToken', () => {
-    it('should verify a valid token', () => {
-      const token = service.generateVerificationToken('user-id', 'test@example.com');
-      const result = service.verifyEmailToken(token);
+    it('should verify a token', () => {
+      const result = service.verifyEmailToken('test-token');
       
-      expect(result).toBeDefined();
-      expect(result?.userId).toBe('user-id');
-      expect(result?.email).toBe('test@example.com');
+      expect(mockTokenService.verifyToken).toHaveBeenCalledWith('test-token');
+      expect(result).toEqual({ userId: 'user-id', email: 'test@example.com' });
     });
 
-    it('should return null for an invalid token', () => {
+    it('should return null for invalid token', () => {
+      mockTokenService.verifyToken.mockReturnValueOnce(null);
+      
       const result = service.verifyEmailToken('invalid-token');
+      
+      expect(mockTokenService.verifyToken).toHaveBeenCalledWith('invalid-token');
       expect(result).toBeNull();
     });
   });
 
   describe('sendVerificationEmail', () => {
-    it('should skip sending when frontend URL is not configured', async () => {
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'FRONTEND_URL') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-      
-      const newService = module.get<MailService>(MailService);
-      const result = await newService.sendVerificationEmail(testUser);
-      
-      expect(result).toBe(false);
-    });
-
-    it('should send verification email successfully', async () => {
-      jest.clearAllMocks();
-      
-      
-      mockSend.mockResolvedValueOnce({});
-      
+    it('should delegate to notificationService', async () => {
       const result = await service.sendVerificationEmail(testUser);
+      
+      expect(mockNotificationService.sendVerificationEmail).toHaveBeenCalledWith(testUser);
       expect(result).toBe(true);
     });
   });
 
-  describe('email sending methods', () => {
-    beforeEach(() => {
-      
-      mockSend.mockResolvedValue({});
-    });
-
-    it('should send account deleted email', async () => {
+  describe('sendAccountDeletedEmail', () => {
+    it('should delegate to notificationService', async () => {
       const result = await service.sendAccountDeletedEmail(testUser);
+      
+      expect(mockNotificationService.sendAccountDeletedEmail).toHaveBeenCalledWith(testUser);
       expect(result).toBe(true);
     });
+  });
 
-    it('should send event created email', async () => {
+  describe('sendEventCreatedEmail', () => {
+    it('should delegate to notificationService', async () => {
       const result = await service.sendEventCreatedEmail(testEvent, testUser);
+      
+      expect(mockNotificationService.sendEventCreatedEmail).toHaveBeenCalledWith(testEvent, testUser);
       expect(result).toBe(true);
     });
+  });
 
-    it('should send event deleted email', async () => {
+  describe('sendEventDeletedEmail', () => {
+    it('should delegate to notificationService', async () => {
       const result = await service.sendEventDeletedEmail(testEvent, testUser);
+      
+      expect(mockNotificationService.sendEventDeletedEmail).toHaveBeenCalledWith(testEvent, testUser);
       expect(result).toBe(true);
     });
+  });
 
-    it('should send registration confirmation email', async () => {
+  describe('sendRegistrationConfirmationEmail', () => {
+    it('should delegate to notificationService', async () => {
       const result = await service.sendRegistrationConfirmationEmail(testEvent, testUser);
+      
+      expect(mockNotificationService.sendRegistrationConfirmationEmail).toHaveBeenCalledWith(testEvent, testUser);
       expect(result).toBe(true);
     });
+  });
 
-    it('should send registration cancelled email', async () => {
+  describe('sendRegistrationCancelledEmail', () => {
+    it('should delegate to notificationService', async () => {
       const result = await service.sendRegistrationCancelledEmail(testEvent, testUser);
+      
+      expect(mockNotificationService.sendRegistrationCancelledEmail).toHaveBeenCalledWith(testEvent, testUser);
       expect(result).toBe(true);
     });
+  });
 
-    it('should send new event notification to participants', async () => {
+  describe('sendNewEventNotificationToParticipants', () => {
+    it('should delegate to notificationService', async () => {
       const participants = [testUser, {...testUser, id: 'user-id-2', email: 'user2@example.com'}];
+      
       const result = await service.sendNewEventNotificationToParticipants(testEvent, participants);
+      
+      expect(mockNotificationService.sendNewEventNotificationToParticipants).toHaveBeenCalledWith(testEvent, participants);
       expect(result).toBe(2);
-    });
-
-    it('should handle failed email in notification batch', async () => {
-      
-      mockSend.mockResolvedValueOnce({});
-      mockSend.mockRejectedValueOnce(new Error('Failed to send email'));
-      
-      const participants = [testUser, {...testUser, id: 'user-id-2', email: 'user2@example.com'}];
-      const result = await service.sendNewEventNotificationToParticipants(testEvent, participants);
-      expect(result).toBe(1);
-    });
-
-    it('should skip sending notifications when service is disabled', async () => {
-      jest.clearAllMocks();
-      
-      mockConfigService.get.mockImplementation((key: string) => {
-        if (key === 'AWS_REGION') return undefined;
-        return mockConfig[key];
-      });
-      
-      const module = await Test.createTestingModule({
-        providers: [
-          MailService,
-          {
-            provide: ConfigService,
-            useValue: mockConfigService,
-          },
-        ],
-      }).compile();
-
-      const disabledService = module.get<MailService>(MailService);
-      
-      const participants = [testUser, {...testUser, id: 'user-id-2', email: 'user2@example.com'}];
-      const result = await disabledService.sendNewEventNotificationToParticipants(testEvent, participants);
-      expect(result).toBe(0);
     });
   });
 });
