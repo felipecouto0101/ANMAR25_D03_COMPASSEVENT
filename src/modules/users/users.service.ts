@@ -1,209 +1,188 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { User } from '../../domain/entities/user.entity';
-import { UserRepository } from '../../domain/repositories/user.repository.interface';
-import { S3Service } from '../../infrastructure/storage/s3/s3.service';
-import { MailService } from '../../infrastructure/mail/mail.service';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable, Inject, ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { UserResponseDto } from './dto/user-response.dto';
-import { 
-  EntityNotFoundException, 
-  ValidationException, 
-  AuthorizationException, 
-  ConflictException 
-} from '../../domain/exceptions/domain.exceptions';
-
-interface MulterFile {
-  fieldname: string;
-  originalname: string;
-  encoding: string;
-  mimetype: string;
-  size: number;
-  buffer: Buffer;
-  destination?: string;
-  filename?: string;
-  path?: string;
-}
+import { UserRepository } from '../../domain/repositories/user.repository.interface';
+import { User } from '../../domain/entities/user.entity';
+import { S3Service } from '../../infrastructure/storage/s3/s3.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
 
 @Injectable()
 export class UsersService {
   constructor(
-    @Inject('UserRepository')
-    private readonly userRepository: UserRepository,
+    @Inject('UserRepository') private readonly userRepository: UserRepository,
     private readonly s3Service: S3Service,
-    private readonly mailService: MailService,
+    private readonly mailService: MailService
   ) {}
 
-  async create(createUserDto: CreateUserDto, profileImage?: MulterFile): Promise<UserResponseDto> {
+  async create(createUserDto: CreateUserDto, profileImage?: any): Promise<UserResponseDto> {
     const existingUser = await this.userRepository.findByEmail(createUserDto.email);
     if (existingUser) {
-      throw new ConflictException(`User with email ${createUserDto.email} already exists`);
+      throw new ConflictException('Email already exists');
     }
-
-    if (!profileImage || !profileImage.buffer) {
-      throw new ValidationException('Profile image is required', {
-        profileImage: 'A valid profile image file is required'
-      });
-    }
-
-    const now = new Date().toISOString();
-    
-    const fileKey = `users/${uuidv4()}-${profileImage.originalname}`;
-    const profileImageUrl = await this.s3Service.uploadFile(profileImage, fileKey);
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    
-    const newUser: User = {
-      ...createUserDto,
-      id: uuidv4(),
+    const userId = uuidv4();
+
+    let profileImageUrl = '';
+    if (profileImage) {
+      const profileImageKey = `profiles/${userId}-${Date.now()}.jpg`;
+      profileImageUrl = await this.s3Service.uploadFile(profileImage, profileImageKey);
+    }
+
+    const user: User = {
+      id: userId,
+      name: createUserDto.name,
+      email: createUserDto.email,
       password: hashedPassword,
+      role: createUserDto.role,
+      phone: createUserDto.phone,
       profileImageUrl,
-      emailVerified: false,
       active: true,
-      createdAt: now,
-      updatedAt: now,
+      emailVerified: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    const createdUser = await this.userRepository.create(newUser);
-    
-    await this.mailService.sendVerificationEmail(createdUser);
-    
-    return new UserResponseDto(createdUser);
+    await this.userRepository.create(user);
+    await this.mailService.sendVerificationEmail(user);
+
+    return this.mapToUserResponse(user);
   }
 
   async verifyEmail(token: string): Promise<boolean> {
     const decoded = this.mailService.verifyEmailToken(token);
     if (!decoded) {
-      throw new ValidationException('Invalid or expired verification token');
+      return false;
     }
 
     const user = await this.userRepository.findById(decoded.userId);
     if (!user) {
-      throw new EntityNotFoundException('User', decoded.userId);
+      return false;
     }
 
     if (user.email !== decoded.email) {
-      throw new ValidationException('Token does not match user email');
-    }
-
-    if (user.emailVerified) {
-      return true;
+      return false;
     }
 
     const updatedUser = {
+      ...user,
       emailVerified: true,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    await this.userRepository.update(user.id, updatedUser);
+    await this.userRepository.update(user.id, {
+      emailVerified: true,
+      updatedAt: new Date().toISOString()
+    });
+    
     return true;
   }
 
   async findAll(queryDto: QueryUsersDto, userId: string, userRole: string): Promise<{ items: UserResponseDto[]; total: number }> {
     if (userRole !== 'admin') {
-      throw new AuthorizationException('Only administrators can list users');
+      return { items: [], total: 0 };
     }
 
     const result = await this.userRepository.findWithFilters({
-      name: queryDto.name,
-      email: queryDto.email,
-      role: queryDto.role,
-      active: true,
+      ...queryDto,
       page: queryDto.page || 1,
-      limit: queryDto.limit || 10,
+      limit: queryDto.limit || 10
     });
-
+    
     return {
-      items: result.items.map(user => new UserResponseDto(user)),
-      total: result.total,
+      items: result.items.map(user => this.mapToUserResponse(user)),
+      total: result.total
     };
   }
 
-  async findById(id: string, requestUserId: string, userRole: string): Promise<UserResponseDto> {
-    if (userRole !== 'admin' && id !== requestUserId) {
-      throw new AuthorizationException('You do not have permission to view this user');
-    }
-
+  async findById(id: string, requestUserId: string, requestUserRole: string): Promise<UserResponseDto> {
     const user = await this.userRepository.findById(id);
-    if (!user || !user.active) {
-      throw new EntityNotFoundException('User', id);
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    return new UserResponseDto(user);
+    if (requestUserRole !== 'admin' && requestUserId !== id) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.mapToUserResponse(user);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto, requestUserId: string, userRole: string, profileImage?: MulterFile): Promise<UserResponseDto> {
-    if (id !== requestUserId && userRole !== 'admin') {
-      throw new AuthorizationException('You do not have permission to update this user');
+  async update(id: string, updateUserDto: UpdateUserDto, requestUserId: string, requestUserRole: string, profileImage?: any): Promise<UserResponseDto> {
+    const user = await this.userRepository.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    const user = await this.userRepository.findById(id);
-    if (!user || !user.active) {
-      throw new EntityNotFoundException('User', id);
+    if (requestUserRole !== 'admin' && requestUserId !== id) {
+      throw new NotFoundException('User not found');
     }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
       const existingUser = await this.userRepository.findByEmail(updateUserDto.email);
       if (existingUser && existingUser.id !== id) {
-        throw new ConflictException(`User with email ${updateUserDto.email} already exists`);
+        throw new ConflictException('Email already exists');
       }
-      
-      updateUserDto['emailVerified'] = false;
     }
 
     let profileImageUrl = user.profileImageUrl;
-
     if (profileImage) {
-      const fileKey = `users/${uuidv4()}-${profileImage.originalname}`;
-      profileImageUrl = await this.s3Service.uploadFile(profileImage, fileKey);
+      const profileImageKey = `profiles/${id}-${Date.now()}.jpg`;
+      profileImageUrl = await this.s3Service.uploadFile(profileImage, profileImageKey);
     }
 
-    let password = user.password;
-    if (updateUserDto.password) {
-      password = await bcrypt.hash(updateUserDto.password, 10);
-    }
-
-    const updatedUser = {
-      ...updateUserDto,
-      password,
+    const updateData: Partial<User> = {
+      name: updateUserDto.name || user.name,
+      email: updateUserDto.email || user.email,
+      phone: updateUserDto.phone || user.phone,
       profileImageUrl,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    const result = await this.userRepository.update(id, updatedUser);
-    if (!result) {
-      throw new EntityNotFoundException('User', id);
+    if (updateUserDto.password) {
+      updateData.password = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    if (updateUserDto.email && updateUserDto.email !== user.email) {
-      await this.mailService.sendVerificationEmail(result);
+    if (updateUserDto.role) {
+      updateData.role = updateUserDto.role;
     }
 
-    return new UserResponseDto(result);
+    await this.userRepository.update(id, updateData);
+    
+    const updatedUser = await this.userRepository.findById(id);
+    if (!updatedUser) {
+      throw new NotFoundException('User not found after update');
+    }
+    
+    return this.mapToUserResponse(updatedUser);
   }
 
-  async delete(id: string, requestUserId: string, userRole: string): Promise<boolean> {
-    if (userRole !== 'admin' && id !== requestUserId) {
-      throw new AuthorizationException('You do not have permission to delete this user');
-    }
-
+  async delete(id: string, requestUserId: string, requestUserRole: string): Promise<boolean> {
     const user = await this.userRepository.findById(id);
     if (!user) {
-      throw new EntityNotFoundException('User', id);
+      throw new NotFoundException('User not found');
     }
 
-    const deactivatedUser = {
-      active: false,
-      updatedAt: new Date().toISOString(),
-    };
+    if (requestUserRole !== 'admin' && requestUserId !== id) {
+      throw new NotFoundException('User not found');
+    }
 
-    await this.userRepository.update(id, deactivatedUser);
+    await this.userRepository.update(id, {
+      active: false,
+      updatedAt: new Date().toISOString()
+    });
     
     await this.mailService.sendAccountDeletedEmail(user);
     
     return true;
+  }
+
+  private mapToUserResponse(user: User): UserResponseDto {
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword as UserResponseDto;
   }
 }
