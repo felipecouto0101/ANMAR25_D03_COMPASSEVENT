@@ -65,8 +65,8 @@ export class S3Service {
         return `https://mock-s3-url.com/${key}`;
       }
       
-      const isProfileImage = key.startsWith('profiles/');
-      const imageBuffer = isProfileImage 
+      const isLambdaProcessed = key.startsWith('profiles/') || key.startsWith('events/');
+      const imageBuffer = isLambdaProcessed 
         ? file.buffer 
         : await sharp(file.buffer)
             .resize(300, 300, {
@@ -85,8 +85,8 @@ export class S3Service {
       await this.s3Client.send(command);
       this.logger.log(`File uploaded successfully to S3: ${key}`);
       
-      if (isProfileImage) {
-        this.logger.log('Profile image uploaded. Lambda will process it.');
+      if (isLambdaProcessed) {
+        this.logger.log('Image uploaded. Lambda will process it.');
       }
       
       return `https://${this.bucketName}.s3.amazonaws.com/${key}`;

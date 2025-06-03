@@ -10,8 +10,8 @@ export const handler = async (event: S3Event): Promise<void> => {
       const bucket = record.s3.bucket.name;
       const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
       
-      if (!key.startsWith('profiles/')) {
-        console.log(`Skipping non-profile file: ${key}`);
+      if (!key.startsWith('profiles/') && !key.startsWith('events/')) {
+        console.log(`Skipping non-processable file: ${key}`);
         continue;
       }
 

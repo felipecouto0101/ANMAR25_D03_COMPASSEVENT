@@ -29,7 +29,7 @@ describe('Image Processor Lambda', () => {
     jest.clearAllMocks();
     mockS3Send = (S3Client as jest.Mock).mock.results[0]?.value.send || jest.fn();
     
-   
+    
     mockS3Send.mockImplementation((command) => {
       if (command instanceof GetObjectCommand) {
         return Promise.resolve({
@@ -60,14 +60,12 @@ describe('Image Processor Lambda', () => {
 
     await handler(event as any);
 
-    
     expect(GetObjectCommand).toHaveBeenCalledWith({
       Bucket: 'test-bucket',
       Key: 'profiles/user-123.jpg'
     });
 
     expect(sharp).toHaveBeenCalled();
-
 
     expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({
       Bucket: 'test-bucket',
@@ -76,7 +74,7 @@ describe('Image Processor Lambda', () => {
     }));
   });
 
-  it('should skip non-profile images', async () => {
+  it('should process event images', async () => {
     const event = {
       Records: [
         {
@@ -90,7 +88,34 @@ describe('Image Processor Lambda', () => {
 
     await handler(event as any);
 
-    
+    expect(GetObjectCommand).toHaveBeenCalledWith({
+      Bucket: 'test-bucket',
+      Key: 'events/event-123.jpg'
+    });
+
+    expect(sharp).toHaveBeenCalled();
+
+    expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({
+      Bucket: 'test-bucket',
+      Key: 'events/event-123.jpg',
+      ContentType: 'image/jpeg'
+    }));
+  });
+
+  it('should skip non-processable images', async () => {
+    const event = {
+      Records: [
+        {
+          s3: {
+            bucket: { name: 'test-bucket' },
+            object: { key: 'other/image-123.jpg' }
+          }
+        }
+      ]
+    };
+
+    await handler(event as any);
+
     expect(GetObjectCommand).not.toHaveBeenCalled();
     expect(sharp).not.toHaveBeenCalled();
     expect(PutObjectCommand).not.toHaveBeenCalled();
@@ -108,13 +133,13 @@ describe('Image Processor Lambda', () => {
         {
           s3: {
             bucket: { name: 'test-bucket' },
-            object: { key: 'events/event-123.jpg' }
+            object: { key: 'other/image-123.jpg' }
           }
         },
         {
           s3: {
             bucket: { name: 'test-bucket' },
-            object: { key: 'profiles/user-456.jpg' }
+            object: { key: 'events/event-456.jpg' }
           }
         }
       ]
@@ -122,13 +147,12 @@ describe('Image Processor Lambda', () => {
 
     await handler(event as any);
 
-  
     expect(GetObjectCommand).toHaveBeenCalledTimes(2);
     expect(PutObjectCommand).toHaveBeenCalledTimes(2);
   });
 
   it('should handle errors gracefully', async () => {
-   
+    
     mockS3Send.mockRejectedValueOnce(new Error('S3 error'));
 
     const event = {

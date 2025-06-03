@@ -50,6 +50,12 @@ export class S3Stack extends cdk.Stack {
       new s3n.LambdaDestination(imageProcessorLambda),
       { prefix: 'profiles/' }
     );
+    
+    this.bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED, 
+      new s3n.LambdaDestination(imageProcessorLambda),
+      { prefix: 'events/' }
+    );
 
     new cdk.CfnOutput(this, 'BucketName', {
       value: this.bucket.bucketName,

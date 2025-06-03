@@ -69,8 +69,8 @@ describe('S3Service', () => {
   });
 
   describe('uploadFile', () => {
-    it('should process non-profile images locally', async () => {
-      const key = 'events/test-image.jpg';
+    it('should process non-Lambda images locally', async () => {
+      const key = 'other/test-image.jpg';
       
       await service.uploadFile(mockFile, key);
       
@@ -83,6 +83,19 @@ describe('S3Service', () => {
 
     it('should not process profile images locally', async () => {
       const key = 'profiles/user-123.jpg';
+      
+      await service.uploadFile(mockFile, key);
+      
+      expect(sharp).not.toHaveBeenCalled();
+      expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({
+        Bucket: 'test-bucket',
+        Key: key,
+        Body: mockFile.buffer // Should use original buffer
+      }));
+    });
+
+    it('should not process event images locally', async () => {
+      const key = 'events/event-123.jpg';
       
       await service.uploadFile(mockFile, key);
       
