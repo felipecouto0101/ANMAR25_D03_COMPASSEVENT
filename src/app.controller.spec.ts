@@ -1,22 +1,22 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 describe('AppController', () => {
   let appController: AppController;
+  let appService: AppService;
 
-  beforeEach(async () => {
-    const app: TestingModule = await Test.createTestingModule({
-      controllers: [AppController],
-      providers: [AppService],
-    }).compile();
-
-    appController = app.get<AppController>(AppController);
+  beforeEach(() => {
+    appService = {
+      getHello: jest.fn().mockReturnValue('Hello World!')
+    } as any;
+    
+    appController = new AppController(appService);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
+  describe('getHello', () => {
+    it('should return the string from AppService', () => {
       expect(appController.getHello()).toBe('Hello World!');
+      expect(appService.getHello).toHaveBeenCalled();
     });
   });
 });

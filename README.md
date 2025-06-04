@@ -1,98 +1,116 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Compass Event
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## WHAT IS THE PROJECT
+Compass Event is an event management system that allows users to create, manage, and register for events. It provides authentication, event management, registration capabilities, and email notifications.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## LIBRARIES USED
+- **NestJS**: ^10.0.0 - Backend framework
+- **AWS SDK**: 
+  - **@aws-sdk/client-dynamodb**: ^3.427.0
+  - **@aws-sdk/client-s3**: ^3.427.0
+  - **@aws-sdk/client-ses**: ^3.427.0
+  - **@aws-sdk/lib-dynamodb**: ^3.427.0
+- **Jest**: ^29.5.0 - Testing framework
+- **AWS CDK**: ^2.102.0 - Infrastructure as code
+- **jsonwebtoken**: ^9.0.2 - Authentication
+- **Sharp**: ^0.32.6 - Image processing
+- **Multer**: ^1.4.5-lts.1 - File uploads
+- **Class Validator**: ^0.14.0 - DTO validation
+- **ical-generator**: ^5.0.1 - Calendar invitation generation
+- **AWS Lambda**: - Serverless function for image processing
 
-## Description
+## EMAIL SERVICE WITH ICALENDAR SUPPORT
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+The application includes an email service that can send emails with iCalendar attachments for event management. This allows users to easily add events to their calendar applications.
 
-## Project setup
 
-```bash
-$ npm install
-```
+## INSTALLATION INSTRUCTIONS
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-username/ANMAR25_D03_COMPASSEVENT.git
+   cd ANMAR25_D03_COMPASSEVENT
+   ```
 
-## Compile and run the project
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-```bash
-# development
-$ npm run start
+3. Set up environment variables (see example below)
 
-# watch mode
-$ npm run start:dev
+4. Deploy AWS infrastructure:
+   ```bash
+   npm run cdk:deploy
+   ```
 
-# production mode
-$ npm run start:prod
-```
+5. Run the application:
+   ```bash
+   npm run start:dev
+   ```
 
-## Run tests
+## ROUTES AND ROUTE RULES
 
-```bash
-# unit tests
-$ npm run test
+### Authentication Routes
 
-# e2e tests
-$ npm run test:e2e
+- **POST /auth/login**: Login with credentials
+  - Body: `{ email, password }`
+  - Returns: JWT token
 
-# test coverage
-$ npm run test:cov
-```
+### User Routes
+- **POST /users**: Register a new user
+  - Body: `{ name, email, password, role, phone }` + profile image file
+  - Rules: Email must be unique, password must be strong, profile image is required
+  - Note: Image will be processed by AWS Lambda to 300x300px
 
-## Deployment
+- **GET /users**: Search all users
+  - Rules: Requires authentication
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- **GET /users/{id}**: Get current user profile
+  - Rules: Requires authentication
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- **GET /users/verify-email**: Verify user email
+  - Query params: `{ token }`
+  - Rules: Token must be valid and not expired
 
-```bash
-$ npm install -g mau
-$ mau deploy
-```
+- **PATCH /users/{id}**: Update current user profile
+  - Body: `{ name, email, password, role, phone }` + optional profile image file
+  - Rules: Requires authentication
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+- **DELETE /users/{id}**: Delete current user account
+  - Rules: Requires authentication
 
-## Resources
 
-Check out a few resources that may come in handy when working with NestJS:
+### Event Routes
+- **GET /events**: Get all events
+  - Query params: `{ name, startDate, endDate, active, page, limit }`
+  - Public route
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- **GET /events/:id**: Get event by ID
+  - Public route
 
-## Support
+- **POST /events**: Create a new event
+  - Body: `{ name, description, date, location }` + image file
+  - Rules: Requires organizer or admin role
+  - Note: Creator is automatically registered for the event
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- **PATCH /events/:id**: Update an event
+  - Body: `{ name, description, date, location }` + optional image file
+  - Rules: Only the creator or admin can update
 
-## Stay in touch
+- **DELETE /events/:id**: Delete an event (soft delete)
+  - Rules: Only the creator or admin can delete
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Registration Routes
+- **GET /registrations**: Get user registrations
+  - Query params: `{ page, limit, userId }`
+  - Rules: Users can see only their own registrations, organizers can see registrations for their events
 
-## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **POST /registrations**: Register for an event
+  - Body: `{ eventId }`
+  - Rules: Event must be active and in the future, user can't register twice
+
+- **DELETE /registrations/:id**: Cancel registration
+  - Rules: Users can cancel only their own registrations
+
+**IMPORTANT**: The database should not be reloaded. The application uses AWS DynamoDB which persists data between application restarts.
