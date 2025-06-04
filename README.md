@@ -6,18 +6,16 @@ Compass Event is an event management system that allows users to create, manage,
 ## LIBRARIES USED
 - **NestJS**: ^10.0.0 - Backend framework
 - **AWS SDK**: 
-  - **@aws-sdk/client-dynamodb**: ^3.427.0
-  - **@aws-sdk/client-s3**: ^3.427.0
-  - **@aws-sdk/client-ses**: ^3.427.0
-  - **@aws-sdk/lib-dynamodb**: ^3.427.0
+  - **@aws-sdk/client-dynamodb**: ^3.0.0
+  - **@aws-sdk/client-s3**: ^3.0.0
+  - **@aws-sdk/client-ses**: ^3.817.0
+  - **@aws-sdk/lib-dynamodb**: ^3.0.0
 - **Jest**: ^29.5.0 - Testing framework
-- **AWS CDK**: ^2.102.0 - Infrastructure as code
+- **AWS CDK**: ^2.0.0 - Infrastructure as code
 - **jsonwebtoken**: ^9.0.2 - Authentication
-- **Sharp**: ^0.32.6 - Image processing
 - **Multer**: ^1.4.5-lts.1 - File uploads
 - **Class Validator**: ^0.14.0 - DTO validation
-- **ical-generator**: ^5.0.1 - Calendar invitation generation
-- **AWS Lambda**: - Serverless function for image processing
+- **ical-generator**: ^9.0.0 - Calendar invitation generation
 
 ## EMAIL SERVICE WITH ICALENDAR SUPPORT
 
@@ -60,7 +58,6 @@ The application includes an email service that can send emails with iCalendar at
 - **POST /users**: Register a new user
   - Body: `{ name, email, password, role, phone }` + profile image file
   - Rules: Email must be unique, password must be strong, profile image is required
-  - Note: Image will be processed by AWS Lambda to 300x300px
 
 - **GET /users**: Search all users
   - Rules: Requires authentication
