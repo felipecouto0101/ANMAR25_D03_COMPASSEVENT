@@ -18,8 +18,7 @@ jest.mock('@aws-sdk/lib-dynamodb', () => {
   };
 });
 
-
-describe.skip('DynamoDBService', () => {
+describe('DynamoDBService', () => {
   let service: DynamoDBService;
 
   beforeEach(async () => {
@@ -41,6 +40,4 @@ describe.skip('DynamoDBService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
-
-  
 });
