@@ -7,6 +7,25 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 
+jest.mock('@aws-sdk/client-s3', () => {
+  return {
+    S3Client: jest.fn().mockImplementation(() => ({
+      send: jest.fn().mockResolvedValue({}),
+      config: {},
+      middlewareStack: {
+        add: jest.fn(),
+        addRelativeTo: jest.fn(),
+        clone: jest.fn(),
+        remove: jest.fn(),
+        resolve: jest.fn(),
+        use: jest.fn(),
+      }
+    })),
+    PutObjectCommand: jest.fn()
+  };
+});
+
+
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
   compare: jest.fn().mockResolvedValue(true)
