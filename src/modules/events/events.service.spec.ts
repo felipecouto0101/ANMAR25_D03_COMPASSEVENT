@@ -8,13 +8,7 @@ import { MailService } from '../../infrastructure/mail/mail.service';
 import { v4 as uuidv4 } from 'uuid';
 
 
-const originalConsoleError = console.error;
-console.error = jest.fn();
-
-
-afterAll(() => {
-  console.error = originalConsoleError;
-});
+jest.spyOn(console, 'error').mockImplementation(() => {});
 
 jest.mock('uuid');
 (uuidv4 as jest.Mock).mockReturnValue('mock-uuid');
