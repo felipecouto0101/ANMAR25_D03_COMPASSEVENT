@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import * as sharp from 'sharp';
 import { ValidationException } from '../../../domain/exceptions/domain.exceptions';
 
 interface MulterFile {
@@ -65,29 +64,16 @@ export class S3Service {
         return `https://mock-s3-url.com/${key}`;
       }
       
-      const isLambdaProcessed = key.startsWith('profiles/') || key.startsWith('events/');
-      const imageBuffer = isLambdaProcessed 
-        ? file.buffer 
-        : await sharp(file.buffer)
-            .resize(300, 300, {
-              fit: 'cover',
-              position: 'center',
-            })
-            .toBuffer();
-
+      
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
-        Body: imageBuffer,
+        Body: file.buffer,
         ContentType: file.mimetype
       });
 
       await this.s3Client.send(command);
       this.logger.log(`File uploaded successfully to S3: ${key}`);
-      
-      if (isLambdaProcessed) {
-        this.logger.log('Image uploaded. Lambda will process it.');
-      }
       
       return `https://${this.bucketName}.s3.amazonaws.com/${key}`;
     } catch (error) {
@@ -99,7 +85,7 @@ export class S3Service {
         return `https://mock-s3-url.com/${key}`;
       }
       
-      throw new ValidationException('Failed to process or upload image', {
+      throw new ValidationException('Failed to upload image', {
         image: 'Please try with a different image file'
       });
     }
