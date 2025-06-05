@@ -1,67 +1,57 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DynamoDBService } from './dynamodb.service';
-import { 
-  PutCommand, 
-  GetCommand, 
-  QueryCommand, 
-  DeleteCommand, 
-  ScanCommand,
-  UpdateCommand
-} from '@aws-sdk/lib-dynamodb';
+
+
+const mockPutCommand = jest.fn();
+const mockGetCommand = jest.fn();
+const mockQueryCommand = jest.fn();
+const mockDeleteCommand = jest.fn();
+const mockScanCommand = jest.fn();
+const mockUpdateCommand = jest.fn();
+
+
+const mockSend = jest.fn();
 
 
 jest.mock('@aws-sdk/lib-dynamodb', () => {
-  const mockSend = jest.fn().mockResolvedValue({ success: true });
-  
   return {
     DynamoDBDocumentClient: {
       from: jest.fn().mockReturnValue({
         send: mockSend
       })
     },
-    PutCommand: jest.fn(),
-    GetCommand: jest.fn(),
-    QueryCommand: jest.fn(),
-    ScanCommand: jest.fn(),
-    DeleteCommand: jest.fn(),
-    UpdateCommand: jest.fn()
+    PutCommand: mockPutCommand,
+    GetCommand: mockGetCommand,
+    QueryCommand: mockQueryCommand,
+    ScanCommand: mockScanCommand,
+    DeleteCommand: mockDeleteCommand,
+    UpdateCommand: mockUpdateCommand
   };
 });
 
 describe('DynamoDBService', () => {
   let service: DynamoDBService;
-  let mockDynamoDBClient: any;
-  let mockDocClient: any;
-  let mockSendFn: jest.Mock;
 
   beforeEach(async () => {
     
-    mockSendFn = jest.fn().mockResolvedValue({ success: true });
-    mockDocClient = {
-      send: mockSendFn
-    };
+    jest.clearAllMocks();
     
-    mockDynamoDBClient = {
-      send: jest.fn().mockResolvedValue({ success: true })
-    };
+    
+    mockSend.mockResolvedValue({ success: true });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DynamoDBService,
         {
           provide: 'DYNAMODB_CLIENT',
-          useValue: mockDynamoDBClient
+          useValue: {
+            send: jest.fn().mockResolvedValue({ success: true })
+          }
         }
       ],
     }).compile();
 
     service = module.get<DynamoDBService>(DynamoDBService);
-    
-    
-    (service as any).docClient = mockDocClient;
-    
-   
-    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
@@ -75,13 +65,12 @@ describe('DynamoDBService', () => {
         Item: { id: '1', name: 'Test Item' }
       };
 
-      
-      mockSendFn.mockResolvedValueOnce({ success: true });
+      mockSend.mockResolvedValueOnce({ success: true });
 
       const result = await service.put(params);
 
-      expect(PutCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockPutCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ success: true });
     });
   });
@@ -93,12 +82,12 @@ describe('DynamoDBService', () => {
         Key: { id: '1' }
       };
 
-      mockSendFn.mockResolvedValueOnce({ Item: { id: '1', name: 'Test Item' } });
+      mockSend.mockResolvedValueOnce({ Item: { id: '1', name: 'Test Item' } });
 
       const result = await service.get(params);
 
-      expect(GetCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockGetCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ Item: { id: '1', name: 'Test Item' } });
     });
   });
@@ -110,12 +99,12 @@ describe('DynamoDBService', () => {
         Key: { id: '1' }
       };
 
-      mockSendFn.mockResolvedValueOnce({ success: true });
+      mockSend.mockResolvedValueOnce({ success: true });
 
       const result = await service.delete(params);
 
-      expect(DeleteCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockDeleteCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ success: true });
     });
   });
@@ -127,12 +116,12 @@ describe('DynamoDBService', () => {
         FilterExpression: 'attribute_exists(name)'
       };
 
-      mockSendFn.mockResolvedValueOnce({ Items: [{ id: '1', name: 'Test Item' }] });
+      mockSend.mockResolvedValueOnce({ Items: [{ id: '1', name: 'Test Item' }] });
 
       const result = await service.scan(params);
 
-      expect(ScanCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockScanCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ Items: [{ id: '1', name: 'Test Item' }] });
     });
   });
@@ -145,12 +134,12 @@ describe('DynamoDBService', () => {
         ExpressionAttributeValues: { ':id': '1' }
       };
 
-      mockSendFn.mockResolvedValueOnce({ Items: [{ id: '1', name: 'Test Item' }] });
+      mockSend.mockResolvedValueOnce({ Items: [{ id: '1', name: 'Test Item' }] });
 
       const result = await service.query(params);
 
-      expect(QueryCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockQueryCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ Items: [{ id: '1', name: 'Test Item' }] });
     });
   });
@@ -166,14 +155,14 @@ describe('DynamoDBService', () => {
         ReturnValues: 'ALL_NEW' as const
       };
 
-      mockSendFn.mockResolvedValueOnce({ 
+      mockSend.mockResolvedValueOnce({ 
         Attributes: { id: '1', name: 'Updated Name' } 
       });
 
       const result = await service.update(params);
 
-      expect(UpdateCommand).toHaveBeenCalledWith(params);
-      expect(mockSendFn).toHaveBeenCalled();
+      expect(mockUpdateCommand).toHaveBeenCalledWith(params);
+      expect(mockSend).toHaveBeenCalled();
       expect(result).toEqual({ 
         Attributes: { id: '1', name: 'Updated Name' } 
       });
