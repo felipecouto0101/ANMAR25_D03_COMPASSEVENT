@@ -14,7 +14,16 @@ import { ConfigModule } from '../../../config/config.module';
        
         if (process.env.NODE_ENV === 'test') {
           return {
-            send: jest.fn().mockResolvedValue({})
+            send: jest.fn().mockResolvedValue({}),
+            config: {},
+            middlewareStack: {
+              add: jest.fn(),
+              addRelativeTo: jest.fn(),
+              clone: jest.fn(),
+              remove: jest.fn(),
+              resolve: jest.fn(),
+              use: jest.fn(),
+            }
           };
         }
         
