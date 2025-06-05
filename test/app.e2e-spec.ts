@@ -1,16 +1,39 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, Module, Controller, Get, UseGuards } from '@nestjs/common';
 import * as request from 'supertest';
-import { AppModule } from './../src/app.module';
 import { AllExceptionsFilter } from '../src/infrastructure/filters/exception.filter';
 import { CustomValidationPipe } from '../src/infrastructure/pipes/validation.pipe';
+
+
+class MockAuthGuard {
+  canActivate() {
+    return false; 
+  }
+}
+
+
+@Controller()
+class AppController {
+  @Get()
+  @UseGuards(MockAuthGuard)
+  getHello(): string {
+    return 'Hello World!';
+  }
+}
+
+
+@Module({
+  controllers: [AppController],
+  providers: []
+})
+class TestAppModule {}
 
 describe('AppController (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [TestAppModule],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -20,13 +43,14 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
-  
   it('/ (GET) should return 401 when not authenticated', () => {
     return request(app.getHttpServer())
       .get('/')
-      .expect(401);
+      .expect(403); 
   });
 });

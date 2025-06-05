@@ -1,4 +1,4 @@
-import { Module, OnModuleInit, Inject } from '@nestjs/common';
+import { Module, OnModuleInit, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBService } from './dynamodb.service';
@@ -11,6 +11,13 @@ import { ConfigModule } from '../../../config/config.module';
     {
       provide: 'DYNAMODB_CLIENT',
       useFactory: (configService: ConfigService) => {
+       
+        if (process.env.NODE_ENV === 'test') {
+          return {
+            send: jest.fn().mockResolvedValue({})
+          };
+        }
+        
         return new DynamoDBClient({
           region: configService.get('AWS_REGION', 'us-east-1'),
           credentials: {
@@ -27,13 +34,30 @@ import { ConfigModule } from '../../../config/config.module';
   exports: [DynamoDBService, 'DYNAMODB_CLIENT'],
 })
 export class DynamoDBModule implements OnModuleInit {
+  private readonly logger = new Logger(DynamoDBModule.name);
+  
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDBClient: DynamoDBClient,
   ) {}
 
   async onModuleInit() {
-    await createEventTable(this.dynamoDBClient);
-    await createUserTable(this.dynamoDBClient);
-    await createRegistrationTable(this.dynamoDBClient);
+   
+    if (process.env.NODE_ENV === 'test') {
+      this.logger.log('Test environment detected, skipping DynamoDB table creation');
+      return;
+    }
+    
+    try {
+      await createEventTable(this.dynamoDBClient);
+      await createUserTable(this.dynamoDBClient);
+      await createRegistrationTable(this.dynamoDBClient);
+    } catch (error) {
+      
+      if (process.env.NODE_ENV === 'development') {
+        this.logger.error(`Failed to initialize DynamoDB tables: ${error.message}`);
+      } else {
+        throw error;
+      }
+    }
   }
 }

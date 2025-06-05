@@ -4,6 +4,10 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  }
+    "^.+\\.(t|j)s$": ["ts-jest", {
+      "isolatedModules": true
+    }]
+  },
+  "setupFilesAfterEnv": ["./jest-setup.js"],
+  "testTimeout": 60000
 }
