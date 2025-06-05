@@ -7,12 +7,6 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 
-const mockFsPromises = {
-  readFile: jest.fn().mockResolvedValue(Buffer.from('test')),
-  writeFile: jest.fn().mockResolvedValue(undefined)
-};
-
-
 jest.mock('@aws-sdk/client-s3', () => ({}));
 jest.mock('@smithy/shared-ini-file-loader', () => ({}));
 jest.mock('@smithy/node-config-provider', () => ({}));
@@ -23,14 +17,24 @@ jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
   compare: jest.fn().mockResolvedValue(true)
 }));
+
 jest.mock('uuid');
+
+
+const mockFsPromises = {
+  readFile: jest.fn().mockResolvedValue(Buffer.from('test')),
+  writeFile: jest.fn().mockResolvedValue(undefined)
+};
+
 jest.mock('fs', () => ({
   readFileSync: jest.fn().mockReturnValue(Buffer.from('test-image')),
   promises: mockFsPromises
 }));
+
 jest.mock('path', () => ({
   join: jest.fn().mockReturnValue('/mock/path/to/image.jpg')
 }));
+
 jest.mock('sharp', () => ({
   default: jest.fn().mockReturnValue({
     resize: jest.fn().mockReturnThis(),
@@ -68,7 +72,6 @@ describe('SeedService', () => {
   };
 
   beforeEach(async () => {
-    
     (uuidv4 as jest.Mock).mockReturnValue('mock-uuid');
     
     jest.clearAllMocks();
