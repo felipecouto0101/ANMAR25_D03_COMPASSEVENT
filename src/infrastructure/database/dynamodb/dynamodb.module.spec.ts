@@ -1,50 +1,104 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBModule } from './dynamodb.module';
 import { DynamoDBService } from './dynamodb.service';
-import { ConfigModule } from '../../../config/config.module';
-import * as utils from './dynamodb.utils';
+import * as dynamodbUtils from './dynamodb.utils';
+
+jest.mock('@aws-sdk/client-dynamodb', () => {
+  return {
+    DynamoDBClient: jest.fn().mockImplementation(() => ({
+      send: jest.fn().mockResolvedValue({})
+    }))
+  };
+});
+
+jest.mock('@aws-sdk/lib-dynamodb', () => {
+  const mockDocClient = {
+    send: jest.fn().mockResolvedValue({})
+  };
+  
+  return {
+    DynamoDBDocumentClient: {
+      from: jest.fn().mockReturnValue(mockDocClient)
+    },
+    PutCommand: jest.fn(),
+    GetCommand: jest.fn(),
+    DeleteCommand: jest.fn(),
+    ScanCommand: jest.fn(),
+    QueryCommand: jest.fn()
+  };
+});
 
 
 jest.mock('./dynamodb.utils', () => ({
   createEventTable: jest.fn().mockResolvedValue(undefined),
   createUserTable: jest.fn().mockResolvedValue(undefined),
-  createRegistrationTable: jest.fn().mockResolvedValue(undefined),
+  createRegistrationTable: jest.fn().mockResolvedValue(undefined)
 }));
 
 describe('DynamoDBModule', () => {
-  let module;
-  let dynamoDBModule;
+  let module: TestingModule;
+  let dynamoDBModule: DynamoDBModule;
+  let mockConfigService: Partial<ConfigService>;
 
   beforeEach(async () => {
+    mockConfigService = {
+      get: jest.fn((key: string) => {
+        switch (key) {
+          case 'AWS_REGION': return 'us-east-1';
+          case 'AWS_ACCESS_KEY_ID': return 'test-key';
+          case 'AWS_SECRET_ACCESS_KEY': return 'test-secret';
+          case 'AWS_SESSION_TOKEN': return 'test-token';
+          default: return undefined;
+        }
+      })
+    };
+
     module = await Test.createTestingModule({
-      imports: [DynamoDBModule, ConfigModule],
       providers: [
         {
-          provide: 'DYNAMODB_CLIENT',
-          useValue: {
-            send: jest.fn().mockResolvedValue({}),
-          },
+          provide: ConfigService,
+          useValue: mockConfigService
         },
+        {
+          provide: 'DYNAMODB_CLIENT',
+          useFactory: () => new DynamoDBClient({}),
+        },
+        DynamoDBService,
+        DynamoDBModule
       ],
     }).compile();
 
-    dynamoDBModule = module.get(DynamoDBModule);
+    dynamoDBModule = module.get<DynamoDBModule>(DynamoDBModule);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
-    expect(DynamoDBModule).toBeDefined();
+    expect(dynamoDBModule).toBeDefined();
   });
 
-  it('should provide DynamoDBService', () => {
-    const service = module.get(DynamoDBService);
-    expect(service).toBeDefined();
-  });
-
-  it('should call createEventTable, createUserTable, and createRegistrationTable on module init', async () => {
-    await dynamoDBModule.onModuleInit();
+  describe('onModuleInit', () => {
+    it('should create all required tables', async () => {
     
-    expect(utils.createEventTable).toHaveBeenCalled();
-    expect(utils.createUserTable).toHaveBeenCalled();
-    expect(utils.createRegistrationTable).toHaveBeenCalled();
+      await dynamoDBModule.onModuleInit();
+
+   
+      expect(dynamodbUtils.createEventTable).toHaveBeenCalledTimes(1);
+      expect(dynamodbUtils.createUserTable).toHaveBeenCalledTimes(1);
+      expect(dynamodbUtils.createRegistrationTable).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle errors when creating tables', async () => {
+   
+      const error = new Error('Failed to create table');
+      (dynamodbUtils.createEventTable as jest.Mock).mockRejectedValueOnce(error);
+      
+     
+      await expect(dynamoDBModule.onModuleInit()).rejects.toThrow('Failed to create table');
+    });
   });
 });

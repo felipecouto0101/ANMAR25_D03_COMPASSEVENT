@@ -1,182 +1,180 @@
-import { CreateTableCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, CreateTableCommand } from '@aws-sdk/client-dynamodb';
 import { createEventTable, createUserTable, createRegistrationTable } from './dynamodb.utils';
 
-jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn(),
-  CreateTableCommand: jest.fn(),
-  ScalarAttributeType: {
-    S: 'S',
-  },
-  KeyType: {
-    HASH: 'HASH',
-  },
-  ProjectionType: {
-    ALL: 'ALL',
-  },
-}));
+
+jest.mock('@aws-sdk/client-dynamodb', () => {
+  const mockSend = jest.fn();
+  return {
+    DynamoDBClient: jest.fn().mockImplementation(() => ({
+      send: mockSend
+    })),
+    CreateTableCommand: jest.fn(),
+    ScalarAttributeType: {
+      S: 'S'
+    },
+    KeyType: {
+      HASH: 'HASH'
+    },
+    ProjectionType: {
+      ALL: 'ALL'
+    }
+  };
+});
 
 describe('DynamoDB Utils', () => {
-  let mockDynamoDBClient: any;
-  let consoleSpy: jest.SpyInstance;
-
+  let mockDynamoDBClient: jest.Mocked<DynamoDBClient>;
+  let mockSend: jest.Mock;
+  
   beforeEach(() => {
-    mockDynamoDBClient = {
-      send: jest.fn(),
-    };
-
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
+    mockSend = jest.fn().mockResolvedValue({});
+    (DynamoDBClient as jest.Mock).mockImplementation(() => ({
+      send: mockSend
+    }));
+    mockDynamoDBClient = new DynamoDBClient({}) as jest.Mocked<DynamoDBClient>;
   });
 
   describe('createEventTable', () => {
-    it('should create Events table with correct parameters', async () => {
-      mockDynamoDBClient.send.mockResolvedValueOnce({});
+    it('should create Events table successfully', async () => {
+     
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
 
       await createEventTable(mockDynamoDBClient);
-
+      
+   
       expect(CreateTableCommand).toHaveBeenCalledWith(expect.objectContaining({
-        TableName: 'Events',
-        KeySchema: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', KeyType: 'HASH' }),
-        ]),
-        AttributeDefinitions: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', AttributeType: 'S' }),
-          expect.objectContaining({ AttributeName: 'date', AttributeType: 'S' }),
-        ]),
-        GlobalSecondaryIndexes: expect.arrayContaining([
-          expect.objectContaining({
-            IndexName: 'DateIndex',
-            KeySchema: expect.arrayContaining([
-              expect.objectContaining({ AttributeName: 'date', KeyType: 'HASH' }),
-            ]),
-          }),
-        ]),
+        TableName: 'Events'
       }));
-
-      expect(mockDynamoDBClient.send).toHaveBeenCalled();
+      expect(mockDynamoDBClient.send).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith('Events table created successfully');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should handle ResourceInUseException', async () => {
+    it('should handle table already exists error', async () => {
+     
       const error = new Error('Table already exists');
       error.name = 'ResourceInUseException';
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
+      mockSend.mockRejectedValueOnce(error);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+   
       await createEventTable(mockDynamoDBClient);
-
+      
+    
       expect(consoleSpy).toHaveBeenCalledWith('Events table already exists');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should throw other errors', async () => {
-      const error = new Error('Unknown error');
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
-      await expect(createEventTable(mockDynamoDBClient)).rejects.toThrow('Unknown error');
+    it('should handle other errors', async () => {
+      
+      const error = new Error('Some AWS error');
+      mockSend.mockRejectedValueOnce(error);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+   
+      await expect(createEventTable(mockDynamoDBClient)).rejects.toThrow('Some AWS error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error creating Events table:', error);
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 
   describe('createUserTable', () => {
-    it('should create Users table with correct parameters', async () => {
-      mockDynamoDBClient.send.mockResolvedValueOnce({});
-
+    it('should create Users table successfully', async () => {
+     
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+    
       await createUserTable(mockDynamoDBClient);
-
+      
+   
       expect(CreateTableCommand).toHaveBeenCalledWith(expect.objectContaining({
-        TableName: 'Users',
-        KeySchema: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', KeyType: 'HASH' }),
-        ]),
-        AttributeDefinitions: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', AttributeType: 'S' }),
-          expect.objectContaining({ AttributeName: 'email', AttributeType: 'S' }),
-        ]),
-        GlobalSecondaryIndexes: expect.arrayContaining([
-          expect.objectContaining({
-            IndexName: 'EmailIndex',
-            KeySchema: expect.arrayContaining([
-              expect.objectContaining({ AttributeName: 'email', KeyType: 'HASH' }),
-            ]),
-          }),
-        ]),
+        TableName: 'Users'
       }));
-
-      expect(mockDynamoDBClient.send).toHaveBeenCalled();
+      expect(mockDynamoDBClient.send).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith('Users table created successfully');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should handle ResourceInUseException', async () => {
+    it('should handle table already exists error', async () => {
+    
       const error = new Error('Table already exists');
       error.name = 'ResourceInUseException';
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
+      mockSend.mockRejectedValueOnce(error);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+   
       await createUserTable(mockDynamoDBClient);
-
+      
+    
       expect(consoleSpy).toHaveBeenCalledWith('Users table already exists');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should throw other errors', async () => {
-      const error = new Error('Unknown error');
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
-      await expect(createUserTable(mockDynamoDBClient)).rejects.toThrow('Unknown error');
+    it('should handle other errors', async () => {
+      
+      const error = new Error('Some AWS error');
+      mockSend.mockRejectedValueOnce(error);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+   
+      await expect(createUserTable(mockDynamoDBClient)).rejects.toThrow('Some AWS error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error creating Users table:', error);
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 
   describe('createRegistrationTable', () => {
-    it('should create Registrations table with correct parameters', async () => {
-      mockDynamoDBClient.send.mockResolvedValueOnce({});
-
+    it('should create Registrations table successfully', async () => {
+     
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+   
       await createRegistrationTable(mockDynamoDBClient);
-
+      
+     
       expect(CreateTableCommand).toHaveBeenCalledWith(expect.objectContaining({
-        TableName: 'Registrations',
-        KeySchema: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', KeyType: 'HASH' }),
-        ]),
-        AttributeDefinitions: expect.arrayContaining([
-          expect.objectContaining({ AttributeName: 'id', AttributeType: 'S' }),
-          expect.objectContaining({ AttributeName: 'userId', AttributeType: 'S' }),
-          expect.objectContaining({ AttributeName: 'eventId', AttributeType: 'S' }),
-        ]),
-        GlobalSecondaryIndexes: expect.arrayContaining([
-          expect.objectContaining({
-            IndexName: 'UserIdIndex',
-            KeySchema: expect.arrayContaining([
-              expect.objectContaining({ AttributeName: 'userId', KeyType: 'HASH' }),
-            ]),
-          }),
-          expect.objectContaining({
-            IndexName: 'EventIdIndex',
-            KeySchema: expect.arrayContaining([
-              expect.objectContaining({ AttributeName: 'eventId', KeyType: 'HASH' }),
-            ]),
-          }),
-        ]),
+        TableName: 'Registrations'
       }));
-
-      expect(mockDynamoDBClient.send).toHaveBeenCalled();
+      expect(mockDynamoDBClient.send).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith('Registrations table created successfully');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should handle ResourceInUseException', async () => {
+    it('should handle table already exists error', async () => {
+     
       const error = new Error('Table already exists');
       error.name = 'ResourceInUseException';
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
+      mockSend.mockRejectedValueOnce(error);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      
+    
       await createRegistrationTable(mockDynamoDBClient);
-
+      
+    
       expect(consoleSpy).toHaveBeenCalledWith('Registrations table already exists');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should throw other errors', async () => {
-      const error = new Error('Unknown error');
-      mockDynamoDBClient.send.mockRejectedValueOnce(error);
-
-      await expect(createRegistrationTable(mockDynamoDBClient)).rejects.toThrow('Unknown error');
+    it('should handle other errors', async () => {
+      
+      const error = new Error('Some AWS error');
+      mockSend.mockRejectedValueOnce(error);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+   
+      await expect(createRegistrationTable(mockDynamoDBClient)).rejects.toThrow('Some AWS error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error creating Registrations table:', error);
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 });

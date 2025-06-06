@@ -37,10 +37,10 @@ export async function createEventTable(dynamoDBClient: DynamoDBClient): Promise<
   } catch (error) {
     if (error.name === 'ResourceInUseException') {
       console.log('Events table already exists');
-    } else {
-      console.error('Error creating Events table:', error);
-      throw error;
+      return;
     }
+    console.error('Error creating Events table:', error);
+    throw error;
   }
 }
 
@@ -81,10 +81,10 @@ export async function createUserTable(dynamoDBClient: DynamoDBClient): Promise<v
   } catch (error) {
     if (error.name === 'ResourceInUseException') {
       console.log('Users table already exists');
-    } else {
-      console.error('Error creating Users table:', error);
-      throw error;
+      return;
     }
+    console.error('Error creating Users table:', error);
+    throw error;
   }
 }
 
@@ -139,9 +139,9 @@ export async function createRegistrationTable(dynamoDBClient: DynamoDBClient): P
   } catch (error) {
     if (error.name === 'ResourceInUseException') {
       console.log('Registrations table already exists');
-    } else {
-      console.error('Error creating Registrations table:', error);
-      throw error;
+      return;
     }
+    console.error('Error creating Registrations table:', error);
+    throw error;
   }
 }

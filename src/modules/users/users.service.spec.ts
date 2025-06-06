@@ -22,12 +22,7 @@ jest.mock('@aws-sdk/client-ses', () => ({
   ListVerifiedEmailAddressesCommand: jest.fn()
 }));
 
-jest.mock('sharp', () => ({
-  default: jest.fn().mockReturnValue({
-    resize: jest.fn().mockReturnThis(),
-    toBuffer: jest.fn().mockResolvedValue(Buffer.from('test'))
-  })
-}));
+
 
 jest.mock('ical-generator', () => ({
   default: jest.fn().mockReturnValue({
