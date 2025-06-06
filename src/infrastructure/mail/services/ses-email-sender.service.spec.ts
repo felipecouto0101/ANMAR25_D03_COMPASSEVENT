@@ -102,7 +102,6 @@ describe('SesEmailSender', () => {
     it('should handle empty VerifiedEmailAddresses', async () => {
       jest.clearAllMocks();
       
-     
       const module = await Test.createTestingModule({
         providers: [
           SesEmailSender,
@@ -112,29 +111,52 @@ describe('SesEmailSender', () => {
       
       const newService = module.get<SesEmailSender>(SesEmailSender);
       
-      
       mockSend.mockResolvedValueOnce({});
       
-     
       await (newService as any).loadVerifiedEmails();
-      
       
       expect(mockSend).toHaveBeenCalled();
       expect(ListVerifiedEmailAddressesCommand).toHaveBeenCalled();
       
-      
       expect((newService as any).verifiedEmails.size).toBe(0);
+    });
+
+    it('should skip loading emails when service is disabled', async () => {
+      jest.clearAllMocks();
+      
+      
+      const incompleteConfigService = {
+        get: jest.fn((key: string) => {
+          if (key === 'AWS_REGION') return undefined;
+          return mockConfig[key];
+        })
+      } as any;
+      
+      const module = await Test.createTestingModule({
+        providers: [
+          SesEmailSender,
+          { provide: ConfigService, useValue: incompleteConfigService }
+        ],
+      }).compile();
+      
+      const newService = module.get<SesEmailSender>(SesEmailSender);
+      
+     
+      expect((newService as any).isEnabled).toBe(false);
+      
+      await (newService as any).loadVerifiedEmails();
+      
+      
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
   describe('sendEmail', () => {
     beforeEach(() => {
-      
       process.env.NODE_ENV = 'test';
     });
 
     afterEach(() => {
-     
       delete process.env.NODE_ENV;
     });
 
@@ -202,7 +224,6 @@ describe('SesEmailSender', () => {
     });
 
     it('should skip sending when service is disabled', async () => {
-      
       Object.defineProperty(service, 'isEnabled', { get: () => false });
       
       const result = await service.sendEmail(
@@ -214,6 +235,27 @@ describe('SesEmailSender', () => {
       expect(SendEmailCommand).not.toHaveBeenCalled();
       expect(SendRawEmailCommand).not.toHaveBeenCalled();
       expect(result).toBe(false);
+    });
+    
+    it('should skip sending when email is not verified', async () => {
+  
+      process.env.NODE_ENV = 'production';
+      
+      
+      jest.spyOn(service as any, 'isEmailVerified').mockReturnValueOnce(false);
+      
+      const result = await service.sendEmail(
+        'unverified@example.com',
+        'Test Subject',
+        '<p>Test Content</p>'
+      );
+      
+      expect(SendEmailCommand).not.toHaveBeenCalled();
+      expect(SendRawEmailCommand).not.toHaveBeenCalled();
+      expect(result).toBe(false);
+      
+     
+      process.env.NODE_ENV = 'test';
     });
 
     it('should handle errors when sending email', async () => {

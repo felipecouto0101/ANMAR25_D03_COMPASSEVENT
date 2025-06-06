@@ -18,12 +18,6 @@ jest.mock('@aws-sdk/client-ses', () => ({
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('sharp', () => ({
-  default: jest.fn().mockReturnValue({
-    resize: jest.fn().mockReturnThis(),
-    toBuffer: jest.fn().mockResolvedValue(Buffer.from('test'))
-  })
-}));
 jest.mock('ical-generator', () => ({
   default: jest.fn().mockReturnValue({
     createEvent: jest.fn().mockReturnThis(),

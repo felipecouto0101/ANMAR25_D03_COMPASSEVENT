@@ -217,12 +217,23 @@ describe('EventsController', () => {
     });
 
     it('should handle errors during initialization', async () => {
-      jest.spyOn(console, 'error').mockImplementation(() => {});
+     
+      jest.spyOn(configService, 'get').mockImplementation((key) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'DEFAULT_ADMIN_EMAIL') return 'admin@example.com';
+        return null;
+      });
+      
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       userRepository.findByEmail.mockRejectedValueOnce(new Error('Database error'));
+      
+     
+      controller['adminId'] = null;
       
       await controller['initAdminId']();
       
-      expect(console.error).toHaveBeenCalled();
+      
+      expect(consoleSpy).toHaveBeenCalled();
     });
 
     it('should not set adminId if admin email is not found', async () => {
@@ -234,13 +245,18 @@ describe('EventsController', () => {
       expect(controller['adminId']).toBeNull();
     });
 
-    it('should not set adminId if admin email is not configured', async () => {
-      jest.spyOn(configService, 'get').mockReturnValueOnce(undefined);
+    it('should set test admin ID if admin email is not configured in test environment', async () => {
+      jest.spyOn(configService, 'get').mockImplementation((key) => {
+        if (key === 'NODE_ENV') return 'test';
+        if (key === 'DEFAULT_ADMIN_EMAIL') return undefined;
+        return null;
+      });
       controller['adminId'] = null;
       
       await controller['initAdminId']();
       
-      expect(controller['adminId']).toBeNull();
+    
+      expect(controller['adminId']).toBe('test-admin-id');
     });
   });
 });

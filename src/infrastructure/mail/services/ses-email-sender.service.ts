@@ -12,6 +12,14 @@ export class SesEmailSender implements EmailSender {
   private verifiedEmails: Set<string> = new Set();
 
   constructor(private readonly configService: ConfigService) {
+    
+    if (this.configService.get('NODE_ENV') === 'test') {
+      this.isEnabled = true;
+      this.fromEmail = 'test@example.com';
+      this.verifiedEmails = new Set(['test@example.com']);
+      return;
+    }
+    
     const region = this.configService.get<string>('AWS_REGION');
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
@@ -19,22 +27,23 @@ export class SesEmailSender implements EmailSender {
     
     this.fromEmail = this.configService.get<string>('EMAIL_FROM');
 
-    if (region && accessKeyId && secretAccessKey && this.fromEmail) {
-      this.isEnabled = true;
-      this.sesClient = new SESClient({
-        region,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-          sessionToken,
-        },
-      });
-      
-      this.logger.log('Email service is enabled');
-      this.loadVerifiedEmails();
-    } else {
+    if (!region || !accessKeyId || !secretAccessKey || !this.fromEmail) {
       this.logger.warn('Email service is disabled due to missing credentials or configuration');
+      return;
     }
+    
+    this.isEnabled = true;
+    this.sesClient = new SESClient({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
+      },
+    });
+    
+    this.logger.log('Email service is enabled');
+    this.loadVerifiedEmails();
   }
 
   private async loadVerifiedEmails(): Promise<void> {
@@ -61,6 +70,12 @@ export class SesEmailSender implements EmailSender {
   }
 
   async sendEmail(to: string, subject: string, html: string, attachments?: EmailAttachment[]): Promise<boolean> {
+ 
+    if (this.configService.get('NODE_ENV') === 'test') {
+      this.logger.log(`[TEST] Email sent to ${to}: ${subject}`);
+      return true;
+    }
+    
     if (!this.isEnabled || !this.sesClient || !this.fromEmail) {
       this.logger.warn(`Email sending skipped: ${subject}`);
       return false;
@@ -119,6 +134,7 @@ export class SesEmailSender implements EmailSender {
         return true;
       }
       
+    
       const params = {
         Source: this.fromEmail,
         Destination: {

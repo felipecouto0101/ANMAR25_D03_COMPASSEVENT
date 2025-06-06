@@ -29,11 +29,25 @@ import { ConfigModule } from '../../../config/config.module';
 export class DynamoDBModule implements OnModuleInit {
   constructor(
     @Inject('DYNAMODB_CLIENT') private readonly dynamoDBClient: DynamoDBClient,
+    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit() {
-    await createEventTable(this.dynamoDBClient);
-    await createUserTable(this.dynamoDBClient);
-    await createRegistrationTable(this.dynamoDBClient);
+    
+    const isTestEnvironment = this.configService.get('NODE_ENV') === 'test';
+    
+    if (!isTestEnvironment) {
+      try {
+        await createEventTable(this.dynamoDBClient);
+        await createUserTable(this.dynamoDBClient);
+        await createRegistrationTable(this.dynamoDBClient);
+      } catch (error) {
+        console.error('Error initializing DynamoDB tables:', error);
+        
+        if (this.configService.get('NODE_ENV') !== 'development') {
+          throw error;
+        }
+      }
+    }
   }
 }

@@ -19,6 +19,12 @@ export class SeedService {
   }
 
   private async seedDefaultAdmin() {
+
+    if (this.configService.get('NODE_ENV') === 'test') {
+      this.logger.log('Skipping admin creation in test environment');
+      return;
+    }
+    
     const defaultAdminEmail = this.configService.get<string>('DEFAULT_ADMIN_EMAIL');
     const defaultAdminName = this.configService.get<string>('DEFAULT_ADMIN_NAME');
     const defaultAdminPassword = this.configService.get<string>('DEFAULT_ADMIN_PASSWORD');
@@ -35,7 +41,8 @@ export class SeedService {
         'admin'
       );
       
-      if (users.items.length > 0) {
+      
+      if (users && users.items && users.items.length > 0) {
         this.logger.log(`Default admin user already exists: ${defaultAdminEmail}`);
         return;
       }

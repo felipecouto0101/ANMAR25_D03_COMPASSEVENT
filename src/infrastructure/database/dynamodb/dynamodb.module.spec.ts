@@ -5,12 +5,28 @@ import { DynamoDBModule } from './dynamodb.module';
 import { DynamoDBService } from './dynamodb.service';
 import * as dynamodbUtils from './dynamodb.utils';
 
-
 jest.mock('@aws-sdk/client-dynamodb', () => {
   return {
     DynamoDBClient: jest.fn().mockImplementation(() => ({
       send: jest.fn().mockResolvedValue({})
     }))
+  };
+});
+
+jest.mock('@aws-sdk/lib-dynamodb', () => {
+  const mockDocClient = {
+    send: jest.fn().mockResolvedValue({})
+  };
+  
+  return {
+    DynamoDBDocumentClient: {
+      from: jest.fn().mockReturnValue(mockDocClient)
+    },
+    PutCommand: jest.fn(),
+    GetCommand: jest.fn(),
+    DeleteCommand: jest.fn(),
+    ScanCommand: jest.fn(),
+    QueryCommand: jest.fn()
   };
 });
 

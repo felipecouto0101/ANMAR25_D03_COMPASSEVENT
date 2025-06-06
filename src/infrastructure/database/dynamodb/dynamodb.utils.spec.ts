@@ -115,6 +115,19 @@ describe('DynamoDB Utils', () => {
       
       consoleSpy.mockRestore();
     });
+
+    it('should handle other errors', async () => {
+      
+      const error = new Error('Some AWS error');
+      mockSend.mockRejectedValueOnce(error);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+   
+      await expect(createUserTable(mockDynamoDBClient)).rejects.toThrow('Some AWS error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error creating Users table:', error);
+      
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   describe('createRegistrationTable', () => {
@@ -149,6 +162,19 @@ describe('DynamoDB Utils', () => {
       expect(consoleSpy).toHaveBeenCalledWith('Registrations table already exists');
       
       consoleSpy.mockRestore();
+    });
+
+    it('should handle other errors', async () => {
+      
+      const error = new Error('Some AWS error');
+      mockSend.mockRejectedValueOnce(error);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+   
+      await expect(createRegistrationTable(mockDynamoDBClient)).rejects.toThrow('Some AWS error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error creating Registrations table:', error);
+      
+      consoleErrorSpy.mockRestore();
     });
   });
 });
